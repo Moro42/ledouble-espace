@@ -201,7 +201,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <label class="f">Clé API SumUp (commence par sup_sk_…)<input class="in" id="suApi" type="password" autocomplete="off"></label>
         <label class="f">Identifiant d’application (affiliate app ID)<input class="in" id="suApp" autocomplete="off"></label>
         <label class="f">Clé d’affiliation (affiliate key)<input class="in" id="suAff" type="password" autocomplete="off"></label>
-        <label class="f">Identifiant du Solo (rempli automatiquement après le jumelage sur la caisse, sinon facultatif)<input class="in" id="suReader" autocomplete="off"></label>
+        <label class="f">Identifiant du Solo (facultatif : laisse vide, la caisse le garde en mémoire après le jumelage)<input class="in" id="suReader" autocomplete="off"></label>
         <div class="inline"><button class="btn prim" id="suSave">Enregistrer SumUp</button><span class="note" id="suEtat"></span></div>
       </div>
     </section>
@@ -507,8 +507,8 @@ function chargerSumup(){
 }
 $('suSave').onclick=function(){
   var c={merchantCode:$('suMerchant').value.trim(),apiKey:$('suApi').value.trim(),appId:$('suApp').value.trim(),affiliateKey:$('suAff').value.trim(),readerId:$('suReader').value.trim(),maj:Date.now()};
-  if(!/^M/i.test(c.merchantCode)){ alert('Le code marchand commence normalement par M'); return; }
-  if(c.apiKey.indexOf('sup_sk_')!==0){ alert('La clé API commence normalement par sup_sk_'); return; }
+  if(!c.merchantCode || !c.apiKey){ alert('Le code marchand et la clé API sont obligatoires.'); return; }
+  if(c.apiKey.indexOf('sup_sk_')!==0 && !confirm('La clé API ne commence pas par « sup_sk_ ». Si tu es sûr qu’elle est correcte, clique sur OK pour l’enregistrer quand même.')) return;
   db.collection('config').doc('sumup').set(c).then(function(){ toast('Identifiants SumUp envoyés à la caisse'); $('suEtat').textContent='Enregistrés à l’instant'; })
     .catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
 };
