@@ -272,10 +272,11 @@ $('nav').onclick=function(e){
 /* ---------- analyse d'une liste d'événements ---------- */
 function analyser(evs){
   var annules={}, r={ca:0,nb:0,cash:0,carte:0,menus:0,lignesSand:0,avecFrites:0,avecBoisson:0,extras:0,ann:0,annMontant:0,tiroir:0,tiroirMotifs:{},heures:{},jours:{},prod:{},ext:{},liste:[]};
-  evs.forEach(function(x){ if(x.type==='annulation'){ annules[x.ref]=true; r.ann++; r.annMontant+=x.montant||0; } if(x.type==='tiroir'){ r.tiroir++; r.tiroirMotifs[x.motif]=(r.tiroirMotifs[x.motif]||0)+1; } });
+  r.carteAnnulees=0; r.tardifsRembourses=0; r.tardifs=0;
+  evs.forEach(function(x){ if(x.type==='paiement'){ if(x.sous==='carte_annulee') r.carteAnnulees++; if(x.sous==='tardif_rembourse') r.tardifsRembourses++; } if(x.type==='annulation'){ annules[x.ref]=true; r.ann++; r.annMontant+=x.montant||0; } if(x.type==='tiroir'){ r.tiroir++; r.tiroirMotifs[x.motif]=(r.tiroirMotifs[x.motif]||0)+1; } });
   evs.forEach(function(x){
     if(x.type!=='vente' || annules[x.id]) return;
-    r.ca+=x.total; r.nb++;
+    r.ca+=x.total; r.nb++; if(x.tardif) r.tardifs++;
     if(x.paiement==='cash') r.cash+=x.total; else { r.carte+=x.total; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+x.total; } }
     var h=new Date(x.tsClient).getHours(); r.heures[h]=(r.heures[h]||0)+x.total;
     r.jours[x.jour]=(r.jours[x.jour]||0)+x.total;
@@ -362,6 +363,9 @@ function rendreDirect(evs,nouveaux){
   // alertes
   var al=[];
   if(r.ann) al.push(r.ann+' annulation'+(r.ann>1?'s':'')+' pour '+eur(r.annMontant));
+  if(r.tardifs) al.push(r.tardifs+' paiement'+(r.tardifs>1?'s':'')+' carte reçu'+(r.tardifs>1?'s':'')+' après une annulation (enregistré'+(r.tardifs>1?'s':'')+')');
+  if(r.tardifsRembourses) al.push(r.tardifsRembourses+' paiement'+(r.tardifsRembourses>1?'s':'')+' carte à rembourser dans SumUp');
+  if(r.carteAnnulees) al.push(r.carteAnnulees+' paiement'+(r.carteAnnulees>1?'s':'')+' carte annulé'+(r.carteAnnulees>1?'s':'')+' sur le Solo');
   if(r.manuels) al.push(r.manuels+' paiement'+(r.manuels>1?'s':'')+' carte saisi'+(r.manuels>1?'s':'')+' à la main sur le Solo pour '+eur(r.manuelsMontant)+' (à vérifier dans SumUp)');
   if(r.tiroir) al.push(r.tiroir+' ouverture'+(r.tiroir>1?'s':'')+' du tiroir hors vente ('+Object.keys(r.tiroirMotifs).map(function(k){return k.toLowerCase()+' ×'+r.tiroirMotifs[k]}).join(', ')+')');
   $('dAlertes').className='card alert'+(al.length?'':' hidden');
@@ -373,9 +377,10 @@ function rendreDirect(evs,nouveaux){
     if(x.type==='vente'){
       var an=r.annules[x.id];
       tag='<span class="tag '+(an?'ann':(x.paiement==='cash'?'cash':(x.carte==='manuel'?'tir':'carte')))+'">'+(an?'ANNULÉ':(x.paiement==='cash'?'Espèces':(x.carte==='solo'?'Carte · Solo':(x.carte==='manuel'?'Carte · manuelle':'Carte'))))+'</span>';
-      lib='<b>n°'+x.n+'</b> · '+esc((x.lignes||[]).map(function(l){return (l.q>1?l.q+'× ':'')+(l.m?'Menu ':'')+nomP(l.p)+(l.s==='seule'?'':' '+l.s)}).join(', '));
+      lib='<b>n°'+x.n+'</b>'+(x.tardif?' <span class="tag tir">reçu après annulation</span>':'')+' · '+esc((x.lignes||[]).map(function(l){return (l.q>1?l.q+'× ':'')+(l.m?'Menu ':'')+nomP(l.p)+(l.s==='seule'?'':' '+l.s)}).join(', '));
       mt=eur(x.total);
     } else if(x.type==='annulation'){ tag='<span class="tag ann">Annulation</span>'; lib='Ticket n°'+x.n+' · '+esc(x.motif); mt='−'+eur(x.montant); }
+    else if(x.type==='paiement'){ tag='<span class="tag tir">Solo</span>'; lib=(x.sous==='carte_annulee'?'Paiement carte annulé':'Paiement carte à rembourser dans SumUp'); mt=eur(x.montant); }
     else if(x.type==='tiroir'){ tag='<span class="tag tir">Tiroir</span>'; lib=esc(x.motif)+' · '+(x.via==='cle'?'clé gérant':'code gérant'); }
     return '<div class="row'+(nouveaux['_']||isNew(x,nouveaux)?' flash':'')+'"><span class="t num">'+hhmm(x.tsClient)+'</span><span class="l">'+tag+' '+lib+'</span><b class="num">'+mt+'</b></div>';
   }).join(''):'<div class="empty">Aucune vente aujourd’hui pour l’instant. Elles apparaîtront ici en direct.</div>';
