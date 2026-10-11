@@ -93,6 +93,10 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 .scroll{overflow-x:auto}
 .savebar{position:sticky;bottom:0;background:var(--bg);padding:14px 0;display:flex;gap:10px;align-items:center;justify-content:flex-end;border-top:1px solid var(--line);margin-top:18px}
 .note{color:var(--ink-soft);font-size:14px}
+.pl-p th,.pl-p td{text-align:center;vertical-align:top;min-width:86px}
+.pl-p td:first-child{text-align:left;white-space:nowrap}
+.pl-cr-p{display:block;width:100%;background:var(--sel);border-radius:8px;padding:6px 4px;font-size:13px;font-weight:700;margin-bottom:4px}
+.pl-add{display:block;width:100%;border:1.5px dashed var(--line);border-radius:8px;padding:4px;color:var(--ink-soft);font-weight:700}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;display:none}
 .toast.on{display:block}
 
@@ -135,6 +139,8 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
   <nav class="nav" id="nav">
     <button data-v="direct" aria-current="page">En direct</button>
     <button data-v="historique">Historique</button>
+    <button data-v="equipe">Équipe</button>
+    <button data-v="stock">Stock</button>
     <button data-v="carte">Carte & prix</button>
     <button data-v="reglages">Réglages caisse</button>
     <button data-v="maj">Mises à jour</button>
@@ -153,6 +159,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <div class="card"><h3 style="margin-top:0">Ventes par heure</h3><div class="bars" id="dBars"></div></div>
         <div class="card"><h3 style="margin-top:0">Ventes additionnelles</h3><div id="dUpsell"></div></div>
       </div>
+      <div class="card hidden" id="dNotes" style="margin-top:12px;border-left:5px solid var(--accent)"></div>
       <div class="card alert hidden" id="dAlertes" style="margin-top:12px"></div>
       <h3>Caisse du jour</h3>
       <div class="card" id="dCloture"><div class="empty">Chargement…</div></div>
@@ -185,6 +192,34 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Clôtures et écarts de caisse</h3><div id="hClo"></div></div>
     </section>
 
+    <!-- ÉQUIPE -->
+    <section class="view" id="v-equipe">
+      <h2>Équipe</h2>
+      <h3>Propositions du gérant</h3><div class="card" id="eqProps"><div class="empty">Chargement…</div></div>
+      <h3>Planning</h3>
+      <div class="inline" style="margin-bottom:10px"><button class="btn small sec" id="eqPrev">‹</button><b id="eqSemaine"></b><button class="btn small sec" id="eqNext">›</button><button class="btn small sec" id="eqCopie">Copier la semaine précédente</button></div>
+      <div class="card scroll" id="eqPlanning"><div class="empty">Chargement…</div></div>
+      <p class="note">Touche « + » pour ajouter un créneau, et un créneau pour le supprimer. Le gérant voit le planning sur sa tablette.</p>
+      <h3>Heures prestées · <span id="eqHeuresTitre"></span></h3>
+      <div class="inline" style="margin-bottom:10px"><button class="btn small sec" data-hper="semaine">Semaine en cours</button><button class="btn small sec" data-hper="prec">Semaine dernière</button><button class="btn small sec" data-hper="mois">Mois en cours</button><button class="btn small dark" id="eqExport">Exporter pour le secrétariat social</button></div>
+      <div class="card" id="eqHeures"><div class="empty">Chargement…</div></div>
+      <h3>Membres de l’équipe</h3><div class="card" id="eqMembres"></div>
+      <button class="btn small dark" id="eqAddM" style="margin-top:10px">+ Ajouter une personne</button>
+      <div id="eqForm" class="hidden" style="margin-top:12px"></div>
+    </section>
+
+    <!-- STOCK -->
+    <section class="view" id="v-stock">
+      <h2>Stock</h2>
+      <p class="note" id="skResume"></p>
+      <h3>Stock actuel</h3><div class="card" id="skEtat"><div class="empty">Chargement…</div></div>
+      <h3>Pertes</h3><div class="card" id="skPertes"></div>
+      <h3>Mouvements des 30 derniers jours</h3><div class="card" id="skMvts"></div>
+      <h3>Commandes préparées par le gérant</h3><div class="card" id="skCmds"></div>
+      <div id="skConfig"></div>
+      <div class="savebar"><button class="btn prim" id="skSave">Enregistrer produits et fournisseurs</button></div>
+    </section>
+
     <!-- CARTE -->
     <section class="view" id="v-carte">
       <h2>Carte & prix</h2>
@@ -198,6 +233,21 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h2>Réglages de la caisse</h2>
       <div id="regForm"><div class="empty">Chargement…</div></div>
       <div class="savebar"><span class="note" id="regEtat"></span><button class="btn prim" id="regSave">Enregistrer les réglages</button></div>
+      <h3>Données</h3>
+      <div class="card form" id="donnees">
+        <b>Exporter tout l’historique</b>
+        <p class="note">Un fichier Excel avec un onglet par type de données : ventes et annulations, tiroir et sorties d’argent, clôtures, pointages, plannings, propositions, stock, commandes, notes.</p>
+        <div class="inline"><label class="note">Du <input class="in" type="date" id="exDu" style="width:auto"></label><label class="note">au <input class="in" type="date" id="exAu" style="width:auto"></label><span class="note">(laisse vide pour tout exporter)</span></div>
+        <div class="inline"><button class="btn dark" id="exGo">Télécharger l’export (.xlsx)</button><span class="note" id="exEtat"></span></div>
+        <hr style="border:0;border-top:1px solid var(--line);margin:8px 0">
+        <b style="color:var(--danger)">Remettre à zéro</b>
+        <p class="note">Ce qui est coché sera effacé du logiciel, après un export complet automatique. La carte, l’équipe, les produits, les fournisseurs et les réglages sont toujours conservés.</p>
+        <label class="switch"><input type="checkbox" data-raz="ventes" checked>Ventes, tiroir, sorties d’argent, clôtures</label>
+        <label class="switch"><input type="checkbox" data-raz="equipe" checked>Pointages, plannings, propositions</label>
+        <label class="switch"><input type="checkbox" data-raz="stock" checked>Stock, commandes, notes du gérant</label>
+        <label class="f">Pour confirmer, tape EFFACER<input class="in" id="razConf" autocomplete="off" style="max-width:240px"></label>
+        <div class="inline"><button class="btn danger" id="razGo">Exporter puis remettre à zéro</button><span class="note" id="razEtat"></span></div>
+      </div>
       <h3>Terminal SumUp Solo</h3>
       <div class="card form" id="sumupForm">
         <p class="note">Ces identifiants ne sont visibles que par toi et par la caisse. Le gérant n’y a pas accès.</p>
@@ -263,7 +313,7 @@ auth.onAuthStateChanged(function(u){
 });
 
 /* ---------- navigation ---------- */
-var vues={direct:null,historique:initHistorique,carte:chargerCarte,reglages:chargerReglages,maj:chargerMaj}, faites={};
+var vues={direct:null,equipe:initEquipe,stock:initStock,historique:initHistorique,carte:chargerCarte,reglages:chargerReglages,maj:chargerMaj}, faites={};
 $('nav').onclick=function(e){
   var b=e.target.closest('button'); if(!b) return;
   var v=b.getAttribute('data-v');
@@ -324,8 +374,11 @@ var unsubJour=null, jourSuivi=null, premiersIds=null;
 function demarrer(){
   chargerNoms();
   chargerRegC();
+  setTimeout(function(){ try{ chargerPropositionsPastille(); }catch(e){} },1500);
   suivreJour();
   suivreClotures();
+  suivreNotes();
+  setTimeout(function(){ try{ initStockPastille(); }catch(e){} },2000);
   setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); } },60000);
   db.collection('etat').doc('caisse').onSnapshot(function(s){ etatCaisse=s.exists?s.data():null; majEtatCaisse(); },function(){});
   setInterval(majEtatCaisse,30000);
@@ -389,7 +442,7 @@ function rendreDirect(evs,nouveaux){
       mt=eur(x.total);
     } else if(x.type==='annulation'){ tag='<span class="tag ann">Annulation</span>'; lib='Ticket n°'+x.n+' · '+esc(x.motif); mt='−'+eur(x.montant); }
     else if(x.type==='paiement'){ tag='<span class="tag tir">Solo</span>'; lib=(x.sous==='carte_annulee'?'Paiement carte annulé':'Paiement carte à rembourser dans SumUp'); mt=eur(x.montant); }
-    else if(x.type==='tiroir' && x.sortie){ tag='<span class="tag tir">Sortie</span>'; lib=esc(x.categorie||'')+(x.precision?' : '+esc(x.precision):'')+' · '+(x.via==='cle'?'clé gérant':'code gérant'); mt='−'+eur(x.montant); }
+    else if(x.type==='tiroir' && x.sortie){ tag='<span class="tag tir">Sortie</span>'; lib=esc(x.categorie||'')+(x.quantite?' ('+x.quantite+' × '+eur(x.prixUnitaire)+')':'')+(x.precision?' : '+esc(x.precision):'')+' · '+(x.via==='cle'?'clé gérant':'code gérant'); mt='−'+eur(x.montant); }
     else if(x.type==='tiroir'){ tag='<span class="tag tir">Tiroir</span>'; lib=esc(x.motif)+' · '+(x.via==='cle'?'clé gérant':'code gérant'); }
     return '<div class="row'+(nouveaux['_']||isNew(x,nouveaux)?' flash':'')+'"><span class="t num">'+hhmm(x.tsClient)+'</span><span class="l">'+tag+' '+lib+'</span><b class="num">'+mt+'</b></div>';
   }).join(''):'<div class="empty">Aucune vente aujourd’hui pour l’instant. Elles apparaîtront ici en direct.</div>';
@@ -472,6 +525,298 @@ function chargerHistorique(){
     $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
   }).catch(function(e){ $('hCa').textContent='—'; toast('Lecture impossible ('+e.code+')'); });
 }
+
+/* ---------- ÉQUIPE (propriétaire) ---------- */
+function chargerPropositionsPastille(){ db.collection('propositions').where('statut','==','en_attente').get().then(function(s){ var nb=s.docs.length, bt=document.querySelector('[data-v="equipe"]'); if(bt) bt.textContent='Équipe'+(nb?' ('+nb+')':''); }).catch(function(){}); }
+var EQ={membres:[]}, semP=null, PL_P={};
+var JC=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+function lundiP(d){ d=new Date(d||new Date()); d.setHours(12,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d; }
+function plusJ(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function minu(hm){ var p=String(hm||'0:0').split(':'); return parseInt(p[0],10)*60+parseInt(p[1]||'0',10); }
+function hFmt(m){ m=Math.round(m); return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0'); }
+function nomM(id){ for(var i=0;i<EQ.membres.length;i++) if(EQ.membres[i].id===id) return EQ.membres[i].nom; return '?'; }
+var ROLES={gerant:'Gérant',etudiant:'Étudiant',employe:'Employé'};
+
+function initEquipe(){
+  // config/equipe : noms et fonctions (lisible par le gérant) ; config/equipe_prive : contrats et coûts (toi seul)
+  Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get()]).then(function(r){
+    EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
+    var pv=r[1].exists?(r[1].data().membres||{}):{};
+    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
+  }).catch(function(){}).then(function(){
+    rendreMembres(); semP=lundiP(); chargerPlanningP(); chargerPropositions(); chargerHeures('semaine');
+  });
+}
+/* ----- membres ----- */
+function rendreMembres(quotas){
+  quotas=quotas||{};
+  $('eqMembres').innerHTML=(EQ.membres.length?EQ.membres.map(function(m,i){
+    var q='';
+    if(m.role==='etudiant'){ var u=(m.soldeDepart||0)*60+(quotas[m.id]||0); q=' · <b class="num" style="color:'+(u>600*60?'var(--danger)':u>500*60?'var(--warn)':'var(--ink)')+'">'+Math.round(u/60)+' h utilisées sur 650</b>'; }
+    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':'')+q+'</span></span><button class="btn small sec" data-editm="'+i+'">Modifier</button></div>';
+  }).join(''):'<div class="empty">Aucune personne pour l’instant.</div>');
+}
+function editerMembre(i){
+  var m=i==null?{id:'m'+Date.now(),nom:'',role:'etudiant',contrat:'',heuresSemaine:'',coutHoraire:1580,soldeDepart:0,actif:true}:JSON.parse(JSON.stringify(EQ.membres[i]));
+  var f=$('eqForm'); f.className='card form';
+  f.innerHTML='<h3 style="margin:0">'+(i==null?'Nouvelle personne':'Modifier '+esc(m.nom))+'</h3>'+
+    '<div class="inline"><label class="f" style="flex:1">Nom<input class="in" id="emNom" value="'+esc(m.nom)+'"></label>'+
+    '<label class="f">Fonction<select class="in" id="emRole"><option value="gerant" '+(m.role==='gerant'?'selected':'')+'>Gérant</option><option value="etudiant" '+(m.role==='etudiant'?'selected':'')+'>Étudiant</option><option value="employe" '+(m.role==='employe'?'selected':'')+'>Employé</option></select></label></div>'+
+    '<div class="inline"><label class="f">Contrat<input class="in" id="emContrat" value="'+esc(m.contrat||'')+'" placeholder="CDI, CDD, étudiant…"></label><label class="f">Heures / semaine<input class="in px" id="emH" inputmode="numeric" value="'+esc(m.heuresSemaine||'')+'"></label>'+
+    '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(m.coutHoraire)+'"></label></div>'+
+    '<label class="f" id="emSoldeL">Heures étudiant déjà utilisées cette année chez d’autres employeurs (solde de départ, voir Student@work)<input class="in px" id="emSolde" inputmode="numeric" value="'+esc(m.soldeDepart||0)+'"></label>'+
+    '<label class="switch"><input type="checkbox" id="emActif" '+(m.actif!==false?'checked':'')+'>Fait partie de l’équipe actuelle</label>'+
+    '<div class="inline"><button class="btn prim" id="emOk">Enregistrer</button><button class="btn sec" id="emNon">Annuler</button></div>';
+  function maj(){ $('emSoldeL').style.display=$('emRole').value==='etudiant'?'':'none'; } $('emRole').onchange=maj; maj();
+  $('emNon').onclick=function(){ f.className='hidden'; };
+  $('emOk').onclick=function(){
+    m.nom=$('emNom').value.trim(); if(!m.nom){ alert('Le nom est obligatoire.'); return; }
+    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.actif=$('emActif').checked;
+    if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
+    var pub=EQ.membres.map(function(x){ return {id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; });
+    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0}; });
+    Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
+  };
+  f.scrollIntoView({behavior:'smooth'});
+}
+/* ----- planning ----- */
+function chargerPlanningP(){
+  var lu=jour(semP);
+  db.collection('planning').doc(lu).get().then(function(s){ PL_P[lu]=s.exists?(s.data().creneaux||[]):[]; rendrePlanningP(); }).catch(function(e){ $('eqPlanning').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+}
+function rendrePlanningP(){
+  if(!semP) return;
+  var lu=jour(semP), cr=PL_P[lu]||[], fin=plusJ(semP,6);
+  $('eqSemaine').textContent='Semaine du '+semP.getDate()+' '+semP.toLocaleDateString('fr-BE',{month:'short'})+' au '+fin.getDate()+' '+fin.toLocaleDateString('fr-BE',{month:'short'});
+  var jours=[]; for(var i=0;i<7;i++) jours.push(jour(plusJ(semP,i)));
+  var actifs=EQ.membres.filter(function(m){return m.actif!==false});
+  var ids=actifs.map(function(m){return m.id}); cr.forEach(function(c){ if(ids.indexOf(c.membre)<0) ids.push(c.membre); });
+  var h='<table class="table pl-p"><tr><th></th>'+jours.map(function(j,i){ return '<th>'+JC[i]+' '+new Date(j+'T12:00:00').getDate()+'</th>'; }).join('')+'<th>Total</th></tr>';
+  ids.forEach(function(id){
+    var tot=0;
+    h+='<tr><td><b>'+esc(nomM(id))+'</b></td>'+jours.map(function(j){
+      var cs=cr.filter(function(c){return c.membre===id&&c.jour===j}).sort(function(a,b){return minu(a.debut)-minu(b.debut)});
+      cs.forEach(function(c){ tot+=minu(c.fin)-minu(c.debut); });
+      return '<td>'+cs.map(function(c){ return '<button class="pl-cr-p" data-delcr="'+c.id+'" title="Supprimer">'+c.debut+'–'+c.fin+' ✕</button>'; }).join('')+'<button class="pl-add" data-addcr="'+id+'|'+j+'">+</button></td>';
+    }).join('')+'<td class="num"><b>'+hFmt(tot)+'</b></td></tr>';
+  });
+  h+='</table>';
+  $('eqPlanning').innerHTML=actifs.length?h:'<div class="empty">Ajoute d’abord les personnes de l’équipe.</div>';
+}
+function sauverPlanning(msg){
+  var lu=jour(semP);
+  return db.collection('planning').doc(lu).set({semaine:lu,creneaux:PL_P[lu]||[],maj:Date.now()}).then(function(){ if(msg) toast(msg); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
+}
+function ajouterCreneau(id,j){
+  var deb=prompt('Début du créneau pour '+nomM(id)+' (HH:MM)','11:30'); if(!deb) return;
+  var fin=prompt('Fin du créneau (HH:MM)','14:00'); if(!fin) return;
+  if(!/^\d{1,2}:\d{2}$/.test(deb)||!/^\d{1,2}:\d{2}$/.test(fin)||minu(fin)<=minu(deb)){ alert('Horaires invalides'); return; }
+  deb=deb.padStart(5,'0'); fin=fin.padStart(5,'0');
+  var lu=jour(semP); PL_P[lu]=PL_P[lu]||[];
+  PL_P[lu].push({id:'c'+Date.now(),membre:id,jour:j,debut:deb,fin:fin});
+  sauverPlanning('Créneau ajouté');
+}
+/* ----- propositions du gérant ----- */
+var PROPS=[];
+function chargerPropositions(){
+  db.collection('propositions').where('statut','==','en_attente').get().then(function(s){
+    PROPS=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; });
+    $('eqProps').innerHTML=PROPS.length?PROPS.sort(function(a,b){return a.tsClient-b.tsClient}).map(function(p){
+      return '<div class="row"><span class="l"><b>'+esc(p.resume)+'</b><br><span class="note">Semaine du '+esc(p.semaine)+(p.motif?' · '+esc(p.motif):'')+'</span></span><span class="inline"><button class="btn small prim" data-acc="'+p.__id+'">Accepter</button><button class="btn small danger" data-ref="'+p.__id+'">Refuser</button></span></div>';
+    }).join(''):'<div class="empty">Aucune proposition en attente.</div>';
+    var nb=PROPS.length, bt=document.querySelector('[data-v="equipe"]'); if(bt) bt.textContent='Équipe'+(nb?' ('+nb+')':'');
+  }).catch(function(e){ $('eqProps').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+}
+function traiterProposition(id,accepter){
+  var p=null; PROPS.forEach(function(x){ if(x.__id===id) p=x; }); if(!p) return;
+  var suite=Promise.resolve();
+  if(accepter){
+    suite=db.collection('planning').doc(p.semaine).get().then(function(s){
+      var cr=s.exists?(s.data().creneaux||[]):[];
+      if(p.action==='supprimer') cr=cr.filter(function(c){return c.id!==p.creneau});
+      if(p.action==='modifier') cr=cr.map(function(c){ return c.id===p.creneau?{id:c.id,membre:p.nouveau.membre,jour:p.nouveau.jour,debut:p.nouveau.debut,fin:p.nouveau.fin}:c; });
+      if(p.action==='ajouter') cr.push({id:'c'+Date.now(),membre:p.nouveau.membre,jour:p.nouveau.jour,debut:p.nouveau.debut,fin:p.nouveau.fin});
+      PL_P[p.semaine]=cr;
+      return db.collection('planning').doc(p.semaine).set({semaine:p.semaine,creneaux:cr,maj:Date.now()});
+    });
+  }
+  suite.then(function(){ return db.collection('propositions').doc(id).update({statut:accepter?'acceptee':'refusee',traiteLe:Date.now()}); })
+    .then(function(){ toast(accepter?'Proposition acceptée : planning mis à jour':'Proposition refusée'); chargerPropositions(); rendrePlanningP(); })
+    .catch(function(e){ alert('Action impossible ('+e.code+')'); });
+}
+/* ----- heures prestées ----- */
+function intervalles(pts,finJournee){
+  // minutes travaillées et nombre de pointages de départ manquants, à partir des pointages d'une personne sur une journée
+  var annules={}; pts.forEach(function(p){ if(p.type==='annule') annules[p.ref]=true; });
+  var l=pts.filter(function(p){return p.type!=='annule'&&!annules[p.__id]}).sort(function(a,b){return a.tsClient-b.tsClient});
+  var tot=0, debut=null, arrivee=null;
+  l.forEach(function(p){
+    if((p.type==='arrivee'||p.type==='reprise') && debut==null){ debut=p.tsClient; if(p.type==='arrivee'&&arrivee==null) arrivee=p.h; }
+    if((p.type==='pause'||p.type==='depart') && debut!=null){ tot+=(p.tsClient-debut)/60000; debut=null; }
+  });
+  var manque=false;
+  if(debut!=null){ if(finJournee) manque=true; else tot+=(Date.now()-debut)/60000; }
+  return {min:tot,arrivee:arrivee,manque:manque};
+}
+function chargerHeures(per){
+  var du, au=jour(), lib;
+  if(per==='mois'){ var d=new Date(); du=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; lib='Mois en cours'; }
+  else if(per==='prec'){ var l0=plusJ(lundiP(),-7); du=jour(l0); au=jour(plusJ(l0,6)); lib='Semaine dernière'; }
+  else { du=jour(lundiP()); lib='Semaine en cours'; }
+  $('eqHeuresTitre').textContent=lib;
+  var annee=new Date().getFullYear()+'-01-01';
+  var lus=[], d0=lundiP(new Date(du+'T12:00:00')); while(jour(d0)<=au){ lus.push(jour(d0)); d0=plusJ(d0,7); }
+  var chargePl=Promise.all(lus.map(function(lu){ return PL_P[lu]?Promise.resolve():db.collection('planning').doc(lu).get().then(function(s){ PL_P[lu]=s.exists?(s.data().creneaux||[]):[]; }); }));
+  Promise.all([
+    chargePl,
+    db.collection('pointages').where('jour','>=',annee).get(),
+    db.collection('evenements').where('jour','>=',du).where('jour','<=',au).get()
+  ]).then(function(res){
+    res.shift();
+    var pts=res[0].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; });
+    var refs={}; pts.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
+    // regroupement par personne et par jour (les annulations sont rattachées au jour de leur pointage)
+    var parMJ={};
+    pts.forEach(function(p){ var m=p.membre||(refs[p.__id]&&null); if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
+    var quotas={}, presteP={}, retards={}, manques={};
+    Object.keys(parMJ).forEach(function(k){
+      var m=k.split('|')[0], j=k.split('|')[1], r=intervalles(parMJ[k], j<jour());
+      quotas[m]=(quotas[m]||0)+r.min;
+      if(j>=du && j<=au){
+        presteP[m]=(presteP[m]||0)+r.min;
+        if(r.manque) manques[m]=(manques[m]||0)+1;
+        var lu=jour(lundiP(new Date(j+'T12:00:00')));
+        var cr=(PL_P[lu]||[]).filter(function(c){return c.membre===m&&c.jour===j}).sort(function(a,b){return minu(a.debut)-minu(b.debut)});
+        if(cr.length && r.arrivee){ var ret=minu(r.arrivee)-minu(cr[0].debut); if(ret>5){ retards[m]=retards[m]||{n:0,min:0}; retards[m].n++; retards[m].min+=ret; } }
+      }
+    });
+    rendreMembres(quotas);
+    // heures prévues sur la période
+    return Promise.resolve().then(function(){
+      var prevu={}; lus.forEach(function(lu){ (PL_P[lu]||[]).forEach(function(c){ if(c.jour>=du&&c.jour<=au) prevu[c.membre]=(prevu[c.membre]||0)+minu(c.fin)-minu(c.debut); }); });
+      var ca=0; res[1].docs.forEach(function(d){ var x=d.data(); if(x.type==='vente') ca+=x.total; if(x.type==='annulation') ca-=x.montant||0; });
+      var cout=0, lignes='';
+      var ids=EQ.membres.map(function(m){return m.id});
+      ids.forEach(function(id){
+        var m=EQ.membres.filter(function(x){return x.id===id})[0];
+        if(!prevu[id] && !presteP[id]) return;
+        var c=(presteP[id]||0)/60*(m.coutHoraire||0); cout+=c; // en centimes
+        lignes+='<tr><td>'+esc(m.nom)+'</td><td class="num">'+hFmt(prevu[id]||0)+'</td><td class="num">'+hFmt(presteP[id]||0)+(manques[id]?' <span class="tag tir">'+manques[id]+' départ'+(manques[id]>1?'s':'')+' non pointé'+(manques[id]>1?'s':'')+'</span>':'')+'</td><td class="num">'+(retards[id]?'<span style="color:var(--warn)">'+retards[id].n+' ('+retards[id].min+' min)</span>':'0')+'</td><td class="num">'+eur(c)+'</td></tr>';
+      });
+      $('eqHeures').innerHTML=lignes?'<div class="scroll"><table class="table"><tr><th>Nom</th><th>Prévu</th><th>Presté</th><th>Retards</th><th>Coût estimé</th></tr>'+lignes+'</table></div><p class="note">Coût estimé de la période : <b>'+eur(cout)+'</b>'+(ca>0?' · '+Math.round(cout*100/ca)+' % du CA ('+eur(ca)+')':'')+'</p>':'<div class="empty">Aucune heure sur la période.</div>';
+      HEURES_EXPORT={du:du,au:au,lignes:ids.map(function(id){ var m=EQ.membres.filter(function(x){return x.id===id})[0]; return [m.nom,ROLES[m.role]||m.role,((prevu[id]||0)/60).toFixed(2).replace('.',','),((presteP[id]||0)/60).toFixed(2).replace('.',',')]; }).filter(function(l){ return l[2]!=='0,00'||l[3]!=='0,00'; })};
+    });
+  }).catch(function(e){ $('eqHeures').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+}
+var HEURES_EXPORT=null;
+function exporterHeures(){
+  if(!HEURES_EXPORT) return;
+  var csv='Nom;Fonction;Heures prévues;Heures prestées\n'+HEURES_EXPORT.lignes.map(function(l){return l.join(';')}).join('\n');
+  var a=document.createElement('a'); a.href='data:text/csv;charset=utf-8,\ufeff'+encodeURIComponent(csv); a.download='heures-'+HEURES_EXPORT.du+'-au-'+HEURES_EXPORT.au+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('button'); if(!b || !document.getElementById('v-equipe') || document.getElementById('v-equipe').className.indexOf('on')<0) return;
+  if(b.id==='eqAddM') editerMembre(null);
+  if(b.hasAttribute('data-editm')) editerMembre(parseInt(b.getAttribute('data-editm'),10));
+  if(b.hasAttribute('data-addcr')){ var x=b.getAttribute('data-addcr').split('|'); ajouterCreneau(x[0],x[1]); }
+  if(b.hasAttribute('data-delcr')){ if(!confirm('Supprimer ce créneau ?')) return; var lu=jour(semP); PL_P[lu]=(PL_P[lu]||[]).filter(function(c){return c.id!==b.getAttribute('data-delcr')}); sauverPlanning('Créneau supprimé'); }
+  if(b.id==='eqPrev'){ semP=plusJ(semP,-7); chargerPlanningP(); }
+  if(b.id==='eqNext'){ semP=plusJ(semP,7); chargerPlanningP(); }
+  if(b.id==='eqCopie'){
+    var lu=jour(semP), avant=jour(plusJ(semP,-7));
+    db.collection('planning').doc(avant).get().then(function(s){
+      var cr=s.exists?(s.data().creneaux||[]):[]; if(!cr.length){ alert('La semaine précédente est vide.'); return; }
+      if((PL_P[lu]||[]).length && !confirm('Remplacer le planning de cette semaine par celui de la semaine précédente ?')) return;
+      PL_P[lu]=cr.map(function(c,i){ var d=plusJ(new Date(c.jour+'T12:00:00'),7); return {id:'c'+Date.now()+i,membre:c.membre,jour:jour(d),debut:c.debut,fin:c.fin}; });
+      sauverPlanning('Semaine précédente copiée');
+    });
+  }
+  if(b.hasAttribute('data-acc')) traiterProposition(b.getAttribute('data-acc'),true);
+  if(b.hasAttribute('data-ref')) traiterProposition(b.getAttribute('data-ref'),false);
+  if(b.hasAttribute('data-hper')) chargerHeures(b.getAttribute('data-hper'));
+  if(b.id==='eqExport') exporterHeures();
+});
+
+/* ---------- STOCK (propriétaire) ---------- */
+function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&p.seuil!=null&&q<=p.seuil) bas++; }); var bt=document.querySelector('[data-v="stock"]'); if(bt) bt.textContent='Stock'+(bas?' ('+bas+')':''); }).catch(function(){}); }
+var SC={produits:[],fournisseurs:[]}, SMV=[];
+function initStock(){
+  var depuis=jour(new Date(Date.now()-120*864e5));
+  Promise.all([
+    db.collection('config').doc('stock').get(),
+    db.collection('stock_mvts').where('jour','>=',depuis).get(),
+    db.collection('commandes').where('jour','>=',jour(new Date(Date.now()-30*864e5))).get()
+  ]).then(function(r){
+    SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[];
+    SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient});
+    var cmds=r[2].docs.map(function(d){return d.data()}).sort(function(a,b){return b.tsClient-a.tsClient});
+    rendreStockP(); rendreConfigStock(); rendreMvts(); rendreCommandesP(cmds);
+  }).catch(function(e){ $('skEtat').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+}
+function stockP(id){ var q=null; SMV.forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==id) return; if(m.type==='inventaire') q=l.qte; else if(m.type==='reception') q=(q||0)+l.qte; else if(m.type==='perte') q=(q||0)-l.qte; }); }); return q; }
+function prodP(id){ var r=null; SC.produits.forEach(function(p){ if(p.id===id) r=p; }); return r; }
+function fourP(id){ var r=null; SC.fournisseurs.forEach(function(f){ if(f.id===id) r=f; }); return r; }
+function qFmt(q,u){ return (q==null?'?':String(Math.round(q*100)/100).replace('.',','))+' '+(u||''); }
+function rendreStockP(){
+  var act=SC.produits.filter(function(p){return p.actif!==false}), bas=0;
+  var h=act.map(function(p){ var q=stockP(p.id), lo=q!=null&&p.seuil!=null&&q<=p.seuil; if(lo) bas++;
+    return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+qFmt(q,p.unite)+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
+  $('skEtat').innerHTML=act.length?h:'<div class="empty">Ajoute d’abord tes produits et fournisseurs plus bas.</div>';
+  $('skResume').textContent=act.length?(bas?bas+' produit'+(bas>1?'s':'')+' sous le seuil':'Aucun produit sous le seuil'):'';
+  var bt=document.querySelector('[data-v="stock"]'); if(bt) bt.textContent='Stock'+(bas?' ('+bas+')':'');
+}
+function rendreMvts(){
+  var debutSem=jour(lundiP()), pertesSem=0, pertesMois=0, detail={}, m0=jour(new Date()).slice(0,8)+'01';
+  var lignes=SMV.slice().reverse().filter(function(m){ return m.jour>=jour(new Date(Date.now()-30*864e5)); }).map(function(m){
+    var val=0;
+    var txt=(m.lignes||[]).map(function(l){ var p=prodP(l.produit)||{nom:'?'}; val+=(p.prix||0)*l.qte; return esc(p.nom)+' '+qFmt(l.qte,p.unite); }).join(', ');
+    if(m.type==='perte'){ if(m.jour>=debutSem) pertesSem+=val; if(m.jour>=m0) pertesMois+=val; var k=(m.motif||'')+' · '+txt; }
+    var tag=m.type==='reception'?'<span class="tag carte">Livraison</span>':m.type==='inventaire'?'<span class="tag">Inventaire</span>':'<span class="tag ann">Perte</span>';
+    var four=m.fournisseur&&m.fournisseur!=='autre'&&fourP(m.fournisseur)?' · '+esc(fourP(m.fournisseur).nom):'';
+    return '<div class="row"><span class="t num">'+esc(m.jour.slice(5))+' '+esc(m.h||'')+'</span><span class="l">'+tag+four+' '+txt+(m.motif?' · '+esc(m.motif):'')+(m.note?' <span class="note">('+esc(m.note)+')</span>':'')+'</span><b class="num">'+(m.type==='perte'&&val?'−'+eur(val):'')+'</b></div>';
+  });
+  $('skMvts').innerHTML=lignes.length?lignes.slice(0,80).join(''):'<div class="empty">Aucun mouvement sur les 30 derniers jours.</div>';
+  $('skPertes').innerHTML='<div class="row"><span class="l">Pertes cette semaine</span><b class="num" style="color:var(--danger)">'+eur(pertesSem)+'</b></div><div class="row"><span class="l">Pertes ce mois-ci</span><b class="num" style="color:var(--danger)">'+eur(pertesMois)+'</b></div><p class="note">Valeur calculée avec les prix d’achat renseignés pour chaque produit.</p>';
+}
+function rendreCommandesP(cmds){
+  $('skCmds').innerHTML=cmds.length?cmds.map(function(c,i){ var f=fourP(c.fournisseur);
+    return '<details class="row" style="display:block"><summary><b>'+esc(f?f.nom:'Autre')+'</b> · '+esc(c.jour)+' '+esc(c.h||'')+' · '+(c.lignes||[]).length+' produit(s)</summary><pre style="white-space:pre-wrap;font:inherit;font-size:14px;color:var(--ink-soft);margin:8px 0 0">'+esc(c.texte||'')+'</pre></details>'; }).join(''):'<div class="empty">Aucune commande préparée ces 30 derniers jours.</div>';
+}
+function rendreConfigStock(){
+  var fo=SC.fournisseurs.map(function(f,i){ return '<tr data-i="'+i+'"><td><input class="in" data-k="nom" value="'+esc(f.nom)+'"></td><td><input class="in" data-k="email" value="'+esc(f.email||'')+'" placeholder="commande@…"></td><td><input class="in" data-k="telephone" value="'+esc(f.telephone||'')+'"></td><td><input class="in" data-k="jourCommande" value="'+esc(f.jourCommande||'')+'" placeholder="ex. lundi"></td><td><button class="btn small danger" data-delf="'+i+'">✕</button></td></tr>'; }).join('');
+  var opts=function(sel){ return '<option value="">—</option>'+SC.fournisseurs.map(function(f){ return '<option value="'+f.id+'" '+(f.id===sel?'selected':'')+'>'+esc(f.nom)+'</option>'; }).join(''); };
+  var pr=SC.produits.map(function(p,i){ return '<tr data-i="'+i+'"><td><input class="in" data-k="nom" value="'+esc(p.nom)+'"></td><td><input class="in px" data-k="unite" value="'+esc(p.unite||'')+'" placeholder="pièces, kg…"></td><td><input class="in px num" data-k="seuil" inputmode="decimal" value="'+(p.seuil!=null?String(p.seuil).replace('.',','):'')+'"></td><td><input class="in px num" data-k="cible" inputmode="decimal" value="'+(p.cible!=null?String(p.cible).replace('.',','):'')+'"></td><td><select class="in" data-k="fournisseur">'+opts(p.fournisseur)+'</select></td><td><input class="in px num" data-k="prix" inputmode="decimal" value="'+vEur(p.prix)+'"></td><td><label class="switch"><input type="checkbox" data-k="actif" '+(p.actif!==false?'checked':'')+'></label></td><td><button class="btn small danger" data-delp="'+i+'">✕</button></td></tr>'; }).join('');
+  $('skConfig').innerHTML='<h3>Fournisseurs</h3><div class="card scroll"><table class="table" id="tFour"><tr><th>Nom</th><th>E-mail de commande</th><th>Téléphone</th><th>Jour de commande</th><th></th></tr>'+fo+'</table><button class="btn small sec" id="skAddF" style="margin-top:10px">+ Ajouter un fournisseur</button></div>'+
+    '<h3>Produits suivis</h3><div class="card scroll"><table class="table" id="tProd"><tr><th>Produit</th><th>Unité</th><th>Seuil d’alerte</th><th>Stock visé</th><th>Fournisseur</th><th>Prix d’achat €</th><th>Suivi</th><th></th></tr>'+pr+'</table><button class="btn small sec" id="skAddP" style="margin-top:10px">+ Ajouter un produit</button><p class="note">Le « stock visé » sert à calculer les quantités conseillées dans les commandes (par défaut : 2 × le seuil).</p></div>';
+}
+function lireConfigStock(){
+  var num=function(v){ v=String(v||'').replace(',','.').trim(); if(v==='') return null; var n=parseFloat(v); return isNaN(n)?null:n; };
+  SC.fournisseurs=Array.prototype.map.call(document.querySelectorAll('#tFour tr[data-i]'),function(tr){ var o=SC.fournisseurs[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){return tr.querySelector('[data-k="'+k+'"]').value.trim()}; return {id:o.id||('f'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),email:g('email'),telephone:g('telephone'),jourCommande:g('jourCommande')}; }).filter(function(f){return f.nom});
+  SC.produits=Array.prototype.map.call(document.querySelectorAll('#tProd tr[data-i]'),function(tr){ var o=SC.produits[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){var el=tr.querySelector('[data-k="'+k+'"]');return el.type==='checkbox'?el.checked:el.value.trim()}; return {id:o.id||('p'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),unite:g('unite'),seuil:num(g('seuil')),cible:num(g('cible')),fournisseur:g('fournisseur')||null,prix:cents(g('prix')),actif:g('actif')}; }).filter(function(p){return p.nom});
+}
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('button'); if(!b || !$('v-stock') || $('v-stock').className.indexOf('on')<0) return;
+  if(b.id==='skAddF'){ lireConfigStock(); SC.fournisseurs.push({id:'',nom:'Nouveau fournisseur'}); rendreConfigStock(); }
+  if(b.id==='skAddP'){ lireConfigStock(); SC.produits.push({id:'',nom:'Nouveau produit',actif:true}); rendreConfigStock(); }
+  if(b.hasAttribute('data-delf')){ if(!confirm('Supprimer ce fournisseur ?')) return; lireConfigStock(); SC.fournisseurs.splice(parseInt(b.getAttribute('data-delf'),10),1); rendreConfigStock(); }
+  if(b.hasAttribute('data-delp')){ if(!confirm('Supprimer ce produit ? (Pour arrêter de le suivre sans perdre l’historique, décoche plutôt « Suivi ».)')) return; lireConfigStock(); SC.produits.splice(parseInt(b.getAttribute('data-delp'),10),1); rendreConfigStock(); }
+  if(b.id==='skSave'){ lireConfigStock(); SC.maj=Date.now(); b.disabled=true;
+    db.collection('config').doc('stock').set(SC).then(function(){ toast('Produits et fournisseurs enregistrés'); rendreConfigStock(); rendreStockP(); rendreMvts(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); }).then(function(){ b.disabled=false; }); }
+});
+
+/* ---------- NOTES DU GÉRANT (dans « En direct ») ---------- */
+function suivreNotes(){
+  db.collection('notes').where('lu','==',false).onSnapshot(function(s){
+    var notes=s.docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return b.tsClient-a.tsClient});
+    var el=$('dNotes'); if(!el) return;
+    el.className=notes.length?'card':'card hidden';
+    el.innerHTML='<b>Notes du gérant</b>'+notes.map(function(n){ return '<div class="row"><span class="l"><span class="tag '+(n.urgent?'ann':'tir')+'">'+esc(n.categorie)+(n.urgent?' · urgent':'')+'</span> '+esc(n.texte)+'<br><span class="note">'+esc(n.jour)+' '+esc(n.h)+'</span></span><button class="btn small sec" data-lu="'+n.__id+'">Lu</button></div>'; }).join('');
+  },function(){});
+}
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('[data-lu]'); if(!b) return;
+  db.collection('notes').doc(b.getAttribute('data-lu')).update({lu:true,luLe:Date.now()}).catch(function(e){ alert('Action impossible ('+e.code+')'); });
+});
 
 /* ---------- CARTE ---------- */
 var CARTE_DEFAUT={
@@ -557,9 +902,84 @@ $('carteSave').onclick=function(){
     .catch(function(e){ alert('Publication impossible ('+e.code+')'); }).then(function(){ $('carteSave').disabled=false; });
 };
 
+/* ---------- DONNÉES : export et remise à zéro ---------- */
+var COLLECTIONS={evenements:'Ventes et tiroir',clotures:'Clôtures',pointages:'Pointages',planning:'Plannings',propositions:'Propositions planning',stock_mvts:'Stock',commandes:'Commandes',notes:'Notes du gérant'};
+var GROUPES_RAZ={ventes:['evenements','clotures'],equipe:['pointages','planning','propositions'],stock:['stock_mvts','commandes','notes']};
+function chargerXlsx(){
+  return new Promise(function(ok,ko){
+    if(window.XLSX) return ok();
+    var sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload=ok; sc.onerror=function(){ ko(new Error('Impossible de charger le module Excel (connexion internet ?)')); };
+    document.head.appendChild(sc);
+  });
+}
+function lignesExport(col,docs){
+  var euros=function(c){ return c==null?'':Math.round(c)/100; };
+  var nomsP=function(l){ return (l||[]).map(function(x){ return (x.q>1?x.q+'× ':'')+(x.m?'Menu ':'')+nomP(x.p)+(x.s==='seule'?'':' '+x.s)+((x.ex||[]).length?' +'+x.ex.map(nomE).join('+'):''); }).join(' | '); };
+  return docs.map(function(d){
+    var x=d.data();
+    if(col==='evenements') return {Jour:x.jour,Heure:x.h||'',Type:x.type,'N° ticket':x.n||'',Détail:x.type==='vente'?nomsP(x.lignes):(x.motif||x.sous||''),'Montant €':euros(x.total!=null?x.total:x.montant),Paiement:x.paiement||'',Carte:x.carte||'','Réf. SumUp':x.sumup&&x.sumup.code||'','Reçu €':euros(x.recu),'Rendu €':euros(x.rendu),Sortie:x.sortie?'oui':'',Quantité:x.quantite||'',Via:x.via||'',Identifiant:x.id||d.id};
+    if(col==='clotures') return {Jour:x.jour,Heure:x.h||'',Type:x.type,'Montant compté €':euros(x.montant),'Fond prévu €':euros(x.fondPrevu),'Fond complet':x.ok===true?'oui':(x.ok===false?'non':''),Détail:x.detail?JSON.stringify(x.detail):''};
+    if(col==='pointages') return {Jour:x.jour,Heure:x.h||'',Type:x.type,Personne:x.membre?nomM(x.membre):'',Annule:x.ref||''};
+    if(col==='planning') return {Semaine:x.semaine||d.id,Créneaux:(x.creneaux||[]).map(function(c){ return nomM(c.membre)+' '+c.jour+' '+c.debut+'-'+c.fin; }).join(' | ')};
+    if(col==='propositions') return {Semaine:x.semaine,Proposition:x.resume,Raison:x.motif||'',Statut:x.statut};
+    if(col==='stock_mvts') return {Jour:x.jour,Heure:x.h||'',Type:x.type,Fournisseur:x.fournisseur||'',Lignes:(x.lignes||[]).map(function(l){ var p=prodP(l.produit); return (p?p.nom:l.produit)+' : '+l.qte; }).join(' | '),Raison:x.motif||'',Remarque:x.note||''};
+    if(col==='commandes') return {Jour:x.jour,Heure:x.h||'',Fournisseur:x.fournisseur||'',Texte:x.texte||''};
+    if(col==='notes') return {Jour:x.jour,Heure:x.h||'',Catégorie:x.categorie,Urgent:x.urgent?'oui':'',Texte:x.texte,Lue:x.lu?'oui':'non'};
+    return x;
+  });
+}
+function exporter(du,au){
+  var etat=$('exEtat'); etat.textContent='Préparation de l’export…';
+  var noms=Object.keys(COLLECTIONS);
+  // noms des personnes et produits pour un export lisible
+  var prep=Promise.all([
+    db.collection('config').doc('equipe').get().then(function(s){ if(s.exists) EQ.membres=s.data().membres||[]; }).catch(function(){}),
+    db.collection('config').doc('stock').get().then(function(s){ if(s.exists){ SC=s.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } }).catch(function(){})
+  ]);
+  return Promise.all([chargerXlsx(),prep]).then(function(){
+    return Promise.all(noms.map(function(c){
+      var q=db.collection(c);
+      if((du||au) && c!=='planning' && c!=='propositions'){ if(du) q=q.where('jour','>=',du); if(au) q=q.where('jour','<=',au); }
+      return q.get();
+    }));
+  }).then(function(res){
+    var wb=XLSX.utils.book_new(), total=0;
+    res.forEach(function(s,i){
+      var rows=lignesExport(noms[i],s.docs); total+=rows.length;
+      var ws=XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune donnée'}]);
+      XLSX.utils.book_append_sheet(wb,ws,COLLECTIONS[noms[i]].slice(0,31));
+    });
+    var nom='le-double-export-'+(du||'debut')+'-au-'+(au||jour())+'.xlsx';
+    XLSX.writeFile(wb,nom);
+    etat.textContent='Export téléchargé ('+total+' lignes) : '+nom;
+    return total;
+  }).catch(function(e){ etat.textContent='Export impossible : '+(e.message||e.code); throw e; });
+}
+$('exGo').onclick=function(){ exporter($('exDu').value||null,$('exAu').value||null).catch(function(){}); };
+$('razGo').onclick=function(){
+  if($('razConf').value.trim()!=='EFFACER'){ alert('Tape EFFACER pour confirmer.'); return; }
+  var cols=[]; Array.prototype.forEach.call(document.querySelectorAll('[data-raz]'),function(c){ if(c.checked) cols=cols.concat(GROUPES_RAZ[c.getAttribute('data-raz')]); });
+  if(!cols.length){ alert('Rien n’est coché.'); return; }
+  if(!confirm('Dernière confirmation : l’export complet va être téléchargé, puis les données cochées seront effacées définitivement. Continuer ?')) return;
+  var etat=$('razEtat'); $('razGo').disabled=true;
+  exporter(null,null).then(function(){
+    etat.textContent='Export terminé. Effacement en cours…';
+    var effaces=0;
+    return cols.reduce(function(p,c){
+      return p.then(function(){ return db.collection(c).get(); }).then(function(s){
+        var docs=s.docs, lots=[];
+        for(var i=0;i<docs.length;i+=400) lots.push(docs.slice(i,i+400));
+        return lots.reduce(function(p2,lot){ return p2.then(function(){ var b=db.batch(); lot.forEach(function(d){ b.delete(d.ref); }); return b.commit().then(function(){ effaces+=lot.length; etat.textContent='Effacement… '+effaces+' éléments'; }); }); },Promise.resolve());
+      });
+    },Promise.resolve()).then(function(){ etat.textContent='Remise à zéro terminée ('+effaces+' éléments effacés). L’export a été téléchargé.'; $('razConf').value=''; toast('Remise à zéro terminée'); });
+  }).catch(function(e){ etat.textContent='Remise à zéro interrompue : '+(e.message||e.code)+'. Rien n’a été effacé si l’export a échoué.'; })
+    .then(function(){ $('razGo').disabled=false; });
+};
+
 /* ---------- RÉGLAGES ---------- */
 var reg=null;
-var MOTIFS_DEFAUT=['Baguettes','Viande','Boissons','Légumes','Emballages','Produits d’entretien','Avance sur salaire'];
+var MOTIFS_DEFAUT=[{nom:'Baguettes',prixUnitaire:75},'Viande','Boissons','Légumes','Emballages','Produits d’entretien','Avance sur salaire'];
 var IMP_DEFAUT=[{id:'principale',nom:'Imprimante du comptoir',type:'serie',port:'/dev/ttyS3',vitesse:9600,roles:['client','tiroir'],actif:true}];
 function chargerSumup(){
   db.collection('config').doc('sumup').get().then(function(s){
@@ -605,19 +1025,20 @@ function rendreReglages(){
    '<h3>Imprimantes</h3><div id="rImps">'+r.imprimantes.map(carteImp).join('')+'</div><button class="btn small sec" id="rAddImp">+ Ajouter une imprimante</button>'+
    '<h3>Fond de caisse et clôture</h3><div class="card form"><div class="inline"><label class="f">Fond de caisse €<input class="in px num" id="rFond" inputmode="decimal" value="'+vEur(r.fondCaisse!=null?r.fondCaisse:5000)+'"></label><label class="f">Écart signalé en rouge au-delà de €<input class="in px num" id="rSeuil" inputmode="decimal" value="'+vEur(r.seuilEcart!=null?r.seuilEcart:200)+'"></label></div>'+
      '<label class="f">Message affiché au gérant après la clôture<input class="in" id="rEnv" value="'+esc(r.messageEnveloppe||'Mets le reste dans l’enveloppe du jour.')+'"></label></div>'+
-   '<h3>Motifs de sortie d’argent</h3><div class="card form"><p class="note">Ce que le gérant peut choisir quand il prend de l’argent dans la caisse. « Autre… » est toujours proposé en plus, avec une précision obligatoire.</p><div id="rMotifs">'+(r.motifsSortie||MOTIFS_DEFAUT).map(function(m,i){return '<div class="inline" style="margin-bottom:8px"><input class="in" data-motif value="'+esc(m)+'" style="flex:1"><button class="btn small danger" data-delmotif="'+i+'">✕</button></div>'}).join('')+'</div><button class="btn small sec" id="rAddMotif">+ Ajouter un motif</button></div>'+
+   '<h3>Motifs de sortie d’argent</h3><div class="card form"><p class="note">Ce que le gérant peut choisir quand il prend de l’argent dans la caisse. « Autre… » est toujours proposé en plus, avec une précision obligatoire. Si tu indiques un prix à la pièce (ex. 0,75 € pour les baguettes), le gérant tape simplement le nombre acheté et le montant se calcule tout seul.</p><div id="rMotifs">'+(r.motifsSortie||MOTIFS_DEFAUT).map(function(m,i){ var o=typeof m==='string'?{nom:m}:m; return '<div class="inline" style="margin-bottom:8px"><input class="in" data-motif value="'+esc(o.nom)+'" style="flex:1"><input class="in px num" data-motifpu inputmode="decimal" placeholder="prix/pièce" value="'+(o.prixUnitaire?vEur(o.prixUnitaire):'')+'" title="Prix à la pièce (facultatif) : le gérant saisit alors le nombre acheté"><button class="btn small danger" data-delmotif="'+i+'">✕</button></div>'}).join('')+'</div><button class="btn small sec" id="rAddMotif">+ Ajouter un motif</button></div>'+
    '<h3>Sécurité</h3><div class="card form">'+
      '<label class="f">Code gérant (4 chiffres, laisse vide pour garder celui de la caisse)<input class="in px" id="rPin" inputmode="numeric" maxlength="4" value="'+esc(r.pin||'')+'"></label>'+
      '<label class="f">Clés gérant autorisées (une par ligne, en plus de celles enregistrées sur la caisse)<textarea class="in" id="rCles" rows="3" style="padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit">'+esc((r.cles||[]).join('\n'))+'</textarea></label></div>'+
    '<h3>Affichage</h3><div class="card form"><label class="f">Nom affiché en haut de la caisse<input class="in" id="rNom" value="'+esc(r.nom||'LE DOUBLE')+'"></label></div>';
-  $('rAddMotif').onclick=function(){ lireReglages(); reg.motifsSortie.push(''); rendreReglages(); var l=document.querySelectorAll('[data-motif]'); l[l.length-1].focus(); };
+  $('rAddMotif').onclick=function(){ lireReglages(); reg.motifsSortie.push({nom:''}); rendreReglages(); var l=document.querySelectorAll('[data-motif]'); l[l.length-1].focus(); };
   Array.prototype.forEach.call(document.querySelectorAll('[data-delmotif]'),function(b){ b.onclick=function(){ lireReglages(); reg.motifsSortie.splice(parseInt(b.getAttribute('data-delmotif'),10),1); rendreReglages(); }; });
   $('rAddImp').onclick=function(){ lireReglages(); reg.imprimantes.push({id:'imp'+Date.now(),nom:'Imprimante cuisine',type:'reseau',ip:'192.168.0.',roles:['cuisine'],actif:true}); rendreReglages(); };
   Array.prototype.forEach.call(document.querySelectorAll('[data-delimp]'),function(b){ b.onclick=function(){ if(!confirm('Supprimer cette imprimante ?')) return; lireReglages(); reg.imprimantes.splice(parseInt(b.getAttribute('data-delimp'),10),1); rendreReglages(); }; });
 }
 function lireReglages(){
   var r=reg, err=[];
-  r.motifsSortie=Array.prototype.map.call(document.querySelectorAll('[data-motif]'),function(x){return x.value.trim()}).filter(Boolean);
+  var pus=document.querySelectorAll('[data-motifpu]');
+  r.motifsSortie=Array.prototype.map.call(document.querySelectorAll('[data-motif]'),function(x,i){ var nom=x.value.trim(), pu=cents(pus[i]&&pus[i].value); return pu?{nom:nom,prixUnitaire:pu}:nom; }).filter(function(m){ return typeof m==='string'?m:m.nom; });
   var fc=cents($('rFond').value), se=cents($('rSeuil').value); if(fc==null) err.push('Fond de caisse invalide'); r.fondCaisse=fc; r.seuilEcart=se==null?200:se; r.messageEnveloppe=$('rEnv').value.trim()||'Mets le reste dans l’enveloppe du jour.';
   r.impression=$('rImp').checked; r.boncuisine=$('rCui').checked;
   r.entete=$('rEnt').value.trim()||'LE DOUBLE'; r.sousEntete=$('rSous').value.trim(); r.pied=$('rPied').value.trim();

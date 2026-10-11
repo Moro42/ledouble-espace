@@ -63,6 +63,30 @@ h2{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
 label.f{display:grid;gap:6px;font-weight:700;font-size:15px}
 .f input{padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
 .err{color:var(--danger);font-weight:700;min-height:20px}
+.pt-ligne{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--surface2)}
+.pt-ligne:last-child{border-bottom:0}
+.pt-ligne b{font-size:19px}
+.pt-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.pt-btn{border-radius:12px;padding:14px 18px;font-weight:700;font-size:17px;background:var(--surface2);min-width:100px}
+.pt-btn.ok{background:var(--ok);color:#fff}
+.pt-btn.ko{background:#F7E3E1;color:var(--danger)}
+.pt-annul{color:var(--ink-soft);font-size:14px;text-decoration:underline;margin-top:6px}
+.pl-nav{display:grid;grid-template-columns:64px 1fr 64px;gap:10px;align-items:center;text-align:center;margin-bottom:14px}
+.pl-scroll{overflow-x:auto}
+.pl{border-collapse:collapse;width:100%;min-width:560px}
+.pl th{font-size:14px;color:var(--ink-soft);padding:6px;text-align:center}
+.pl td{padding:4px;text-align:center;vertical-align:top;border-top:1px solid var(--surface2)}
+.pl-nom{font-weight:700;text-align:left!important;white-space:nowrap}
+.pl-cr{display:block;width:100%;background:var(--sel);border-radius:8px;padding:8px 4px;font-size:14px;font-weight:700;margin-bottom:4px}
+.sel{padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;width:100%;font:inherit}
+details summary{padding:4px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1.5px solid var(--line);border-radius:999px;padding:10px 16px;font-weight:700;font-size:16px;background:#fff}
+.chip.on{border-color:#6E4A17;background:var(--sel)}
+.st-line{grid-template-columns:1fr 200px 60px!important;padding:6px 0;border-bottom:1px solid var(--surface2)}
+.switch{display:flex;align-items:center;gap:10px;font-weight:700}
+.switch input{width:22px;height:22px}
+@media (max-width:520px){.st-line{grid-template-columns:1fr 150px 40px!important}}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;display:none}
 .toast.on{display:block}
 @media (max-width:520px){.cline{grid-template-columns:62px 1fr 84px}.step{grid-template-columns:52px 1fr 52px}}
@@ -134,19 +158,26 @@ function accueil(){
   $('vue').innerHTML='<h2>Bonjour</h2><p class="sub">'+d+'</p><div class="tiles">'+
     tile('ouverture','Ouverture','Vérifier le fond de caisse',bOuv,e.ouverture?'':'main')+
     tile('cloture','Clôture du soir','Compter le tiroir',bClo,(e.ouverture&&!e.cloture)?'main':'')+
-    tile('','Pointage','Bientôt disponible','', 'off')+
-    tile('','Planning','Bientôt disponible','', 'off')+
-    tile('','Livraisons & stock','Bientôt disponible','', 'off')+
-    tile('','Commandes fournisseurs','Bientôt disponible','', 'off')+
-    tile('','Pertes','Bientôt disponible','', 'off')+
-    tile('','Notes au propriétaire','Bientôt disponible','', 'off')+'</div>';
+    tile('pointage','Pointage','Arrivées, pauses, départs','')+
+    tile('planning','Planning','Semaine de l’équipe, propositions','')+
+    tile('stock','Livraisons & stock','Réceptions, inventaire','')+
+    tile('commandes','Commandes fournisseurs','Préparer, envoyer','')+
+    tile('pertes','Pertes','Invendus, périmés, casse','')+
+    tile('notes','Notes au propriétaire','Incidents, demandes','')+'</div>';
 }
 document.addEventListener('click',function(ev){
   var t=ev.target.closest('[data-go]'); if(!t) return;
   var g=t.getAttribute('data-go');
   if(g==='ouverture') ouverture();
   if(g==='cloture') comptage('cloture');
-  if(g==='accueil') accueil();
+  if(g==='accueil'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; accueil(); }
+  if(g==='pointage') vuePointage();
+  if(g==='stock'||g==='commandes'||g==='pertes'||g==='notes'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; }
+  if(g==='stock') vueStock();
+  if(g==='commandes') vueCommandes();
+  if(g==='pertes') vuePertes();
+  if(g==='notes') vueNotes();
+  if(g==='planning'){ semaineVue=null; vuePlanning(0); }
 });
 
 /* ---------- ouverture ---------- */
@@ -214,6 +245,345 @@ function envoyer(ev,ok){
     alert('Envoi impossible ('+e.code+'). Vérifie la connexion internet et réessaie : ton comptage est gardé.');
   });
 }
+
+/* =====================================================================
+   ÉQUIPE : pointage et planning (côté gérant)
+   ===================================================================== */
+var MEMBRES=[], PLANNING={}, POINTAGES=[], unsubPt=null;
+var JOURS_COURTS=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+function lundi(d){ d=new Date(d||new Date()); d.setHours(12,0,0,0); var j=(d.getDay()+6)%7; d.setDate(d.getDate()-j); return d; }
+function ajouterJours(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function nomMembre(id){ for(var i=0;i<MEMBRES.length;i++) if(MEMBRES[i].id===id) return MEMBRES[i].nom; return '?'; }
+function minutes(hm){ var p=String(hm||'0:0').split(':'); return parseInt(p[0],10)*60+parseInt(p[1]||'0',10); }
+function hmDe(ts){ var d=new Date(ts); return pad(d.getHours())+':'+pad(d.getMinutes()); }
+
+function chargerEquipe(cb){
+  db.collection('config').doc('equipe').get().then(function(s){ MEMBRES=(s.exists&&s.data().membres||[]).filter(function(m){return m.actif!==false}); }).catch(function(){}).then(function(){
+    var lu=jour(lundi());
+    db.collection('planning').doc(lu).get().then(function(s){ PLANNING[lu]=s.exists?(s.data().creneaux||[]):[]; }).catch(function(){ PLANNING[lu]=[]; }).then(cb);
+  });
+}
+function creneauxDuJour(j){ var lu=jour(lundi(new Date(j+'T12:00:00'))); return (PLANNING[lu]||[]).filter(function(c){return c.jour===j}); }
+
+/* état de chaque personne d'après ses pointages du jour (les pointages annulés sont ignorés) */
+function etatPersonne(id){
+  var annules={}; POINTAGES.forEach(function(p){ if(p.type==='annule') annules[p.ref]=true; });
+  var l=POINTAGES.filter(function(p){ return p.membre===id && p.type!=='annule' && !annules[p.__id]; }).sort(function(a,b){return a.tsClient-b.tsClient});
+  var etat='absent', arrivee=null, depuis=null, dernier=l.length?l[l.length-1]:null;
+  l.forEach(function(p){
+    if(p.type==='arrivee'){ etat='present'; if(!arrivee) arrivee=p.h; depuis=p.h; }
+    if(p.type==='pause'){ etat='pause'; depuis=p.h; }
+    if(p.type==='reprise'){ etat='present'; depuis=p.h; }
+    if(p.type==='depart'){ etat='parti'; depuis=p.h; }
+  });
+  return {etat:etat,arrivee:arrivee,depuis:depuis,dernier:dernier};
+}
+
+function vuePointage(){
+  chargerEquipe(function(){
+    if(unsubPt) unsubPt();
+    unsubPt=db.collection('pointages').where('jour','==',jour()).onSnapshot(function(s){
+      POINTAGES=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; });
+      rendrePointage();
+    },function(e){ $('vue').innerHTML='<div class="card"><div class="err">Lecture impossible ('+e.code+')</div></div>'; });
+  });
+}
+function rendrePointage(){
+  if(!document.getElementById('ptListe')){
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Un appui enregistre l’heure exacte.</p><div class="card" id="ptListe"></div><div id="ptAutres"></div>';
+  }
+  var auj=creneauxDuJour(jour()), prevus={}, h='';
+  auj.forEach(function(c){ (prevus[c.membre]=prevus[c.membre]||[]).push(c); });
+  function ligne(m){
+    var e=etatPersonne(m.id), cr=prevus[m.id]||[], debut=cr.length?cr.map(function(c){return c.debut}).sort()[0]:null;
+    var info='', boutons='';
+    if(e.etat==='absent') info=debut?'Prévu à '+debut:'Pas prévu aujourd’hui';
+    else if(e.etat==='present'){ var ret=debut?minutes(e.arrivee)-minutes(debut):0; info='Arrivé à '+e.arrivee+(debut?' · prévu '+debut:'')+(ret>5?' <span style="color:var(--warn)">(+'+ret+' min)</span>':''); }
+    else if(e.etat==='pause') info='En pause depuis '+e.depuis;
+    else info='Parti à '+e.depuis;
+    if(e.etat==='absent') boutons='<button class="pt-btn ok" data-pt="arrivee" data-m="'+m.id+'">Arrivée</button>';
+    if(e.etat==='present') boutons='<button class="pt-btn" data-pt="pause" data-m="'+m.id+'">Pause</button><button class="pt-btn ko" data-pt="depart" data-m="'+m.id+'">Départ</button>';
+    if(e.etat==='pause') boutons='<button class="pt-btn ok" data-pt="reprise" data-m="'+m.id+'">Reprise</button>';
+    if(e.etat==='parti') boutons='<button class="pt-btn" data-pt="arrivee" data-m="'+m.id+'">Revenir</button>';
+    var annul='';
+    if(e.dernier && Date.now()-e.dernier.tsClient<5*60000) annul='<button class="pt-annul" data-annule="'+e.dernier.__id+'">Annuler le dernier pointage ('+e.dernier.h+')</button>';
+    return '<div class="pt-ligne"><div><b>'+esc(m.nom)+'</b>'+(m.role==='gerant'?' <span class="sub">(gérant)</span>':'')+'<div class="sub" style="margin:2px 0 0">'+info+'</div>'+annul+'</div><div class="pt-actions">'+boutons+'</div></div>';
+  }
+  var planifies=MEMBRES.filter(function(m){ return prevus[m.id] || etatPersonne(m.id).etat!=='absent'; });
+  var autres=MEMBRES.filter(function(m){ return planifies.indexOf(m)<0; });
+  $('ptListe').innerHTML=MEMBRES.length?(planifies.length?planifies.map(ligne).join(''):'<p class="sub" style="margin:0">Personne n’est prévu aujourd’hui.</p>'):'<p class="sub" style="margin:0">La liste de l’équipe n’a pas encore été créée par le propriétaire.</p>';
+  $('ptAutres').innerHTML=autres.length?'<details class="card" style="margin-top:14px"><summary style="font-weight:700;cursor:pointer">Autres membres de l’équipe ('+autres.length+')</summary>'+autres.map(ligne).join('')+'</details>':'';
+}
+document.addEventListener('click',function(ev){
+  var b=ev.target.closest('[data-pt],[data-annule]'); if(!b) return;
+  if(b.hasAttribute('data-annule')){
+    db.collection('pointages').add({type:'annule',ref:b.getAttribute('data-annule'),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT}).then(function(){ toast('Pointage annulé'); });
+    return;
+  }
+  var type=b.getAttribute('data-pt'), m=b.getAttribute('data-m');
+  b.disabled=true;
+  db.collection('pointages').add({type:type,membre:m,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+    .then(function(){ toast(nomMembre(m)+' : '+({arrivee:'arrivée',pause:'pause',reprise:'reprise',depart:'départ'})[type]+' à '+hhmm()); })
+    .catch(function(e){ b.disabled=false; alert('Pointage impossible ('+e.code+'). Vérifie la connexion internet.'); });
+});
+
+/* ---------- planning (consultation + propositions) ---------- */
+var semaineVue=null;
+function vuePlanning(decalage){
+  semaineVue=semaineVue||lundi();
+  if(decalage) semaineVue=ajouterJours(semaineVue,7*decalage);
+  var lu=jour(semaineVue);
+  db.collection('config').doc('equipe').get().then(function(s){ MEMBRES=(s.exists&&s.data().membres||[]).filter(function(m){return m.actif!==false}); }).catch(function(){}).then(function(){
+    return db.collection('planning').doc(lu).get();
+  }).then(function(s){
+    PLANNING[lu]=s&&s.exists?(s.data().creneaux||[]):[];
+    return db.collection('propositions').where('semaine','==',lu).get().catch(function(){ return {docs:[]}; });
+  }).then(function(sp){
+    var props=(sp&&sp.docs||[]).map(function(d){ var o=d.data(); o.__id=d.id; return o; });
+    rendrePlanning(lu,props);
+  });
+}
+function rendrePlanning(lu,props){
+  var cr=PLANNING[lu]||[], fin=ajouterJours(semaineVue,6);
+  var titre='Semaine du '+semaineVue.getDate()+' '+semaineVue.toLocaleDateString('fr-BE',{month:'long'})+' au '+fin.getDate()+' '+fin.toLocaleDateString('fr-BE',{month:'long'});
+  var jours=[]; for(var i=0;i<7;i++) jours.push(jour(ajouterJours(semaineVue,i)));
+  var utilises=jours.filter(function(j,i){ return i<5 || cr.some(function(c){return c.jour===j}); });
+  var h='<button class="back" data-go="accueil">‹ Accueil</button><h2>Planning</h2><div class="pl-nav"><button class="btn sec" data-sem="-1">‹</button><b>'+titre+'</b><button class="btn sec" data-sem="1">›</button></div>';
+  if(!cr.length) h+='<div class="card"><p class="sub" style="margin:0">Aucun planning publié pour cette semaine.</p></div>';
+  else {
+    h+='<div class="card pl-scroll"><table class="pl"><tr><th></th>'+utilises.map(function(j){ var d=new Date(j+'T12:00:00'); return '<th>'+JOURS_COURTS[(d.getDay()+6)%7]+' '+d.getDate()+'</th>'; }).join('')+'</tr>';
+    var ids=[]; cr.forEach(function(c){ if(ids.indexOf(c.membre)<0) ids.push(c.membre); });
+    ids.forEach(function(id){
+      h+='<tr><td class="pl-nom">'+esc(nomMembre(id))+'</td>'+utilises.map(function(j){
+        var cs=cr.filter(function(c){return c.membre===id&&c.jour===j});
+        return '<td>'+cs.map(function(c){ return '<button class="pl-cr" data-cr="'+c.id+'">'+c.debut+'–'+c.fin+'</button>'; }).join('')+'</td>';
+      }).join('')+'</tr>';
+    });
+    h+='</table><p class="sub" style="margin:10px 0 0">Touche un créneau pour proposer une modification.</p></div>';
+  }
+  h+='<button class="btn dark" data-prop-new="1" style="margin-top:14px">+ Proposer un créneau supplémentaire</button>';
+  if(props.length){
+    h+='<h3 style="margin:22px 0 8px">Mes propositions</h3><div class="card">'+props.sort(function(a,b){return b.tsClient-a.tsClient}).map(function(p){
+      var st=p.statut==='acceptee'?'<span class="etat" style="background:#E4F1E9;color:#11703A">Acceptée</span>':p.statut==='refusee'?'<span class="etat" style="background:#F7E3E1;color:#9E1F15">Refusée</span>':'<span class="etat" style="background:#FBEBD3;color:#7A4A05">En attente</span>';
+      return '<div class="pt-ligne"><div>'+esc(p.resume||'')+(p.motif?'<div class="sub" style="margin:2px 0 0">'+esc(p.motif)+'</div>':'')+'</div>'+st+'</div>';
+    }).join('')+'</div>';
+  }
+  $('vue').innerHTML=h;
+  $('vue').onclick=function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    if(b.hasAttribute('data-sem')) vuePlanning(parseInt(b.getAttribute('data-sem'),10));
+    if(b.hasAttribute('data-cr')){ var id=b.getAttribute('data-cr'); proposer(lu,cr.filter(function(c){return c.id===id})[0]); }
+    if(b.hasAttribute('data-prop-new')) proposer(lu,null);
+  };
+}
+function optionsMembres(sel){ return MEMBRES.map(function(m){ return '<option value="'+m.id+'" '+(m.id===sel?'selected':'')+'>'+esc(m.nom)+'</option>'; }).join(''); }
+function proposer(lu,c){
+  var jours=[]; for(var i=0;i<7;i++){ var d=ajouterJours(semaineVue,i); jours.push('<option value="'+jour(d)+'" '+(c&&c.jour===jour(d)?'selected':'')+'>'+JOURS_COURTS[i]+' '+d.getDate()+'</option>'); }
+  ouvrirModal('<h2 style="font-size:22px">'+(c?'Modifier ce créneau':'Nouveau créneau')+'</h2>'+
+    (c?'<p class="sub" style="margin:0">Actuel : '+esc(nomMembre(c.membre))+', '+c.debut+'–'+c.fin+'</p>':'')+
+    (c?'<label class="f">Action<select id="prAct" class="sel"><option value="modifier">Changer la personne ou les horaires</option><option value="supprimer">Supprimer ce créneau</option></select></label>':'')+
+    '<div id="prChamps"><label class="f">Personne<select id="prMembre" class="sel">'+optionsMembres(c&&c.membre)+'</select></label>'+
+    '<label class="f">Jour<select id="prJour" class="sel">'+jours.join('')+'</select></label>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><label class="f">Début<input id="prDebut" type="time" class="sel" value="'+(c?c.debut:'11:30')+'"></label><label class="f">Fin<input id="prFin" type="time" class="sel" value="'+(c?c.fin:'14:00')+'"></label></div></div>'+
+    '<label class="f">Raison (pour le propriétaire)<input id="prMotif" class="sel" maxlength="120" placeholder="ex. Sarah est malade, Yanis la remplace"></label>'+
+    '<button class="btn prim" id="prOk">Envoyer la proposition</button><button class="btn sec" id="prNon">Annuler</button>');
+  if(c) $('prAct').onchange=function(){ $('prChamps').style.display=this.value==='supprimer'?'none':''; };
+  $('prNon').onclick=fermerModal;
+  $('prOk').onclick=function(){
+    var act=c?$('prAct').value:'ajouter';
+    var nv={membre:$('prMembre').value,jour:$('prJour').value,debut:$('prDebut').value,fin:$('prFin').value};
+    if(act!=='supprimer' && (!nv.debut||!nv.fin||minutes(nv.fin)<=minutes(nv.debut))){ alert('Les horaires ne sont pas valides.'); return; }
+    var d=new Date(nv.jour+'T12:00:00'), lib=JOURS_COURTS[(d.getDay()+6)%7]+' '+d.getDate();
+    var resume=act==='supprimer'?'Supprimer : '+nomMembre(c.membre)+' '+c.debut+'–'+c.fin:act==='ajouter'?'Ajouter : '+nomMembre(nv.membre)+', '+lib+' '+nv.debut+'–'+nv.fin:'Modifier : '+nomMembre(c.membre)+' '+c.debut+'–'+c.fin+' → '+nomMembre(nv.membre)+', '+lib+' '+nv.debut+'–'+nv.fin;
+    $('prOk').disabled=true;
+    db.collection('propositions').add({semaine:lu,action:act,creneau:c?c.id:null,nouveau:act==='supprimer'?null:nv,resume:resume,motif:$('prMotif').value.trim(),statut:'en_attente',tsClient:Date.now(),par:GERANT})
+      .then(function(){ fermerModal(); toast('Proposition envoyée au propriétaire'); vuePlanning(0); })
+      .catch(function(e){ $('prOk').disabled=false; alert('Envoi impossible ('+e.code+')'); });
+  };
+}
+
+
+/* =====================================================================
+   STOCK, LIVRAISONS, INVENTAIRE, PERTES, COMMANDES, NOTES (côté gérant)
+   ===================================================================== */
+var STOCKCFG={produits:[],fournisseurs:[]}, MVTS=[];
+function chargerStock(cb){
+  var depuis=jour(ajouterJours(new Date(),-120));
+  Promise.all([
+    db.collection('config').doc('stock').get().catch(function(){ return null; }),
+    db.collection('stock_mvts').where('jour','>=',depuis).get().catch(function(){ return {docs:[]}; })
+  ]).then(function(r){
+    STOCKCFG=r[0]&&r[0].exists?r[0].data():{produits:[],fournisseurs:[]};
+    STOCKCFG.produits=(STOCKCFG.produits||[]).filter(function(p){return p.actif!==false});
+    STOCKCFG.fournisseurs=STOCKCFG.fournisseurs||[];
+    MVTS=r[1].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }).sort(function(a,b){return a.tsClient-b.tsClient});
+    cb();
+  });
+}
+/* stock = dernier inventaire + réceptions − pertes depuis */
+function stockDe(id){
+  var q=null;
+  MVTS.forEach(function(m){
+    (m.lignes||[]).forEach(function(l){
+      if(l.produit!==id) return;
+      if(m.type==='inventaire') q=l.qte;
+      else if(m.type==='reception') q=(q||0)+l.qte;
+      else if(m.type==='perte') q=(q||0)-l.qte;
+    });
+  });
+  return q;
+}
+function nomFour(id){ for(var i=0;i<STOCKCFG.fournisseurs.length;i++) if(STOCKCFG.fournisseurs[i].id===id) return STOCKCFG.fournisseurs[i].nom; return 'Autre'; }
+function fmtQ(q,u){ return (q==null?'?':(Math.round(q*100)/100).toString().replace('.',','))+' '+(u||''); }
+
+function vueStock(){
+  chargerStock(function(){
+    var p=STOCKCFG.produits, bas=0, h='';
+    p.forEach(function(x){
+      var q=stockDe(x.id), lo=q!=null && x.seuil!=null && q<=x.seuil; if(lo) bas++;
+      h+='<div class="pt-ligne"><div><b>'+esc(x.nom)+'</b>'+(x.fournisseur?'<div class="sub" style="margin:2px 0 0">'+esc(nomFour(x.fournisseur))+'</div>':'')+'</div><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+fmtQ(q,x.unite)+(lo?' · bas':'')+'</b></div>';
+    });
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Livraisons & stock</h2><p class="sub">'+(p.length?(bas?bas+' produit'+(bas>1?'s':'')+' sous le seuil':'Aucun produit sous le seuil'):'')+'</p>'+
+      (p.length?'<div class="card">'+h+'</div>':'<div class="card"><p class="sub" style="margin:0">La liste des produits n’a pas encore été créée par le propriétaire.</p></div>')+
+      '<div class="tiles" style="margin-top:14px"><button class="tile main" data-st="reception"><b>Réception livraison</b><span>Ce qui vient d’arriver</span></button>'+
+      '<button class="tile" data-st="inventaire"><b>Inventaire</b><span>Compter la réserve</span></button>'+
+      '<button class="tile" data-go="pertes"><b>Déclarer une perte</b><span>Invendus, périmés, casse</span></button></div>';
+    $('vue').onclick=function(ev){
+      var b=ev.target.closest('[data-st]'); if(!b) return;
+      saisieLignes(b.getAttribute('data-st'));
+    };
+  });
+}
+/* écran commun : quantités par produit (réception, inventaire, commande) */
+function saisieLignes(type,fourChoisi){
+  var titres={reception:'Livraison reçue',inventaire:'Inventaire',commande:'Commande fournisseur'};
+  var four=fourChoisi||null;
+  function produitsVisibles(){ return STOCKCFG.produits.filter(function(p){ return type==='inventaire' || !four || four==='autre' || p.fournisseur===four; }); }
+  function render(){
+    var h='<button class="back" data-go="'+(type==='commande'?'commandes':'stock')+'">‹ Retour</button><h2>'+titres[type]+'</h2>';
+    if(type!=='inventaire'){
+      h+='<p class="sub">Fournisseur</p><div class="chips">'+STOCKCFG.fournisseurs.map(function(f){ return '<button class="chip'+(four===f.id?' on':'')+'" data-four="'+f.id+'">'+esc(f.nom)+'</button>'; }).join('')+'<button class="chip'+(four==='autre'?' on':'')+'" data-four="autre">Autre</button></div>';
+      if(!four){ $('vue').innerHTML=h+'<div class="card" style="margin-top:12px"><p class="sub" style="margin:0">Choisis d’abord le fournisseur.</p></div>'; return; }
+    } else h+='<p class="sub">Compte ce qu’il y a réellement dans la réserve. Laisse vide un produit non compté.</p>';
+    var lignes=produitsVisibles();
+    h+='<div class="card" style="margin-top:12px">'+(lignes.length?lignes.map(function(p){
+      var q=stockDe(p.id), conseil='';
+      if(type==='commande'){ var cible=p.cible!=null?p.cible:(p.seuil!=null?p.seuil*2:null); if(cible!=null&&q!=null) conseil=Math.max(0,Math.ceil(cible-q)); }
+      var val=type==='inventaire'?'':(type==='commande'?(conseil===''?0:conseil):0);
+      return '<div class="cline st-line"><span><b>'+esc(p.nom)+'</b><br><span class="sub">stock : '+fmtQ(q,p.unite)+(conseil!==''?' · conseillé : '+conseil:'')+'</span></span><div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="'+val+'" placeholder="—"><button data-p="'+p.id+'">+</button></div><span class="t">'+esc(p.unite||'')+'</span></div>';
+    }).join(''):'<p class="sub" style="margin:0">Aucun produit pour ce fournisseur.</p>')+'</div>'+
+    '<label class="f" style="margin-top:12px">Remarque (facultatif)<input class="sel" id="stNote" maxlength="200" placeholder="'+(type==='reception'?'ex. 2 baguettes abîmées, livraison incomplète…':'')+'"></label>'+
+    '<button class="btn prim" id="stOk" style="margin-top:12px">'+(type==='reception'?'Enregistrer la livraison':type==='inventaire'?'Enregistrer l’inventaire':'Préparer le mail de commande')+'</button>';
+    $('vue').innerHTML=h;
+  }
+  render();
+  $('vue').onclick=function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    if(b.hasAttribute('data-four')){ four=b.getAttribute('data-four'); render(); return; }
+    var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
+    if(m||p){ var inp=document.querySelector('[data-q="'+(m||p)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; n=Math.max(0,n+(p?1:-1)); inp.value=n; return; }
+    if(b.id==='stOk'){
+      var lignes=[];
+      Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(inp){
+        var v=String(inp.value).trim(); if(v==='') return; var n=parseFloat(v.replace(',','.')); if(isNaN(n)) return;
+        if(type==='inventaire' || n>0) lignes.push({produit:inp.getAttribute('data-q'),qte:n});
+      });
+      if(!lignes.length){ alert('Aucune quantité saisie.'); return; }
+      var note=$('stNote').value.trim();
+      if(type==='commande'){ preparerCommande(four,lignes,note); return; }
+      b.disabled=true;
+      db.collection('stock_mvts').add({type:type,fournisseur:four||null,lignes:lignes,note:note,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+        .then(function(){ toast(type==='reception'?'Livraison enregistrée':'Inventaire enregistré'); vueStock(); })
+        .catch(function(e){ b.disabled=false; alert('Envoi impossible ('+e.code+')'); });
+    }
+  };
+}
+/* ---------- pertes ---------- */
+function vuePertes(){
+  chargerStock(function(){
+    var produit=null, motif='Invendu';
+    var MOTIFS=['Invendu','Périmé','Casse','Erreur de préparation','Autre'];
+    function render(){
+      $('vue').innerHTML='<button class="back" data-go="stock">‹ Retour</button><h2>Déclarer une perte</h2>'+
+        '<p class="sub">Produit</p><div class="chips">'+STOCKCFG.produits.map(function(p){ return '<button class="chip'+(produit===p.id?' on':'')+'" data-prod="'+p.id+'">'+esc(p.nom)+'</button>'; }).join('')+'</div>'+
+        (STOCKCFG.produits.length?'':'<div class="card"><p class="sub" style="margin:0">La liste des produits n’a pas encore été créée par le propriétaire.</p></div>')+
+        '<p class="sub" style="margin-top:14px">Quantité</p><div class="step" style="max-width:320px"><button data-m="q">−</button><input inputmode="decimal" data-q="q" value="1"><button data-p="q">+</button></div>'+
+        '<p class="sub" style="margin-top:14px">Raison</p><div class="chips">'+MOTIFS.map(function(m){ return '<button class="chip'+(motif===m?' on':'')+'" data-motif="'+m+'">'+m+'</button>'; }).join('')+'</div>'+
+        '<label class="f" style="margin-top:12px">Précision (facultatif)<input class="sel" id="peNote" maxlength="200"></label>'+
+        '<button class="btn prim" id="peOk" style="margin-top:12px" '+(produit?'':'disabled')+'>Enregistrer la perte</button>';
+    }
+    render();
+    $('vue').onclick=function(ev){
+      var b=ev.target.closest('button'); if(!b) return;
+      if(b.hasAttribute('data-prod')){ var q=document.querySelector('[data-q="q"]').value; produit=b.getAttribute('data-prod'); render(); document.querySelector('[data-q="q"]').value=q; return; }
+      if(b.hasAttribute('data-motif')){ var q2=document.querySelector('[data-q="q"]').value; motif=b.getAttribute('data-motif'); render(); document.querySelector('[data-q="q"]').value=q2; return; }
+      var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
+      if(m||p){ var inp=document.querySelector('[data-q="q"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
+      if(b.id==='peOk'){
+        var n2=parseFloat(String(document.querySelector('[data-q="q"]').value).replace(',','.'));
+        if(!(n2>0)){ alert('Quantité invalide.'); return; }
+        b.disabled=true;
+        db.collection('stock_mvts').add({type:'perte',lignes:[{produit:produit,qte:n2}],motif:motif,note:$('peNote').value.trim(),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+          .then(function(){ toast('Perte enregistrée'); vueStock(); })
+          .catch(function(e){ b.disabled=false; alert('Envoi impossible ('+e.code+')'); });
+      }
+    };
+  });
+}
+/* ---------- commandes fournisseurs ---------- */
+function vueCommandes(){
+  chargerStock(function(){
+    db.collection('commandes').where('jour','>=',jour(ajouterJours(new Date(),-30))).get().catch(function(){ return {docs:[]}; }).then(function(s){
+      var cmds=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }).sort(function(a,b){return b.tsClient-a.tsClient});
+      $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Commandes fournisseurs</h2><p class="sub">Les quantités conseillées tiennent compte du stock actuel.</p>'+
+        '<button class="btn dark" id="cmdNew">+ Préparer une commande</button>'+
+        '<h3 style="margin:22px 0 8px">Commandes des 30 derniers jours</h3><div class="card">'+(cmds.length?cmds.map(function(c){
+          return '<div class="pt-ligne"><div><b>'+esc(nomFour(c.fournisseur))+'</b><div class="sub" style="margin:2px 0 0">'+esc(c.jour)+' · '+(c.lignes||[]).length+' produit(s)</div></div><span class="etat" style="background:#E4F1E9;color:#11703A">Préparée</span></div>';
+        }).join(''):'<p class="sub" style="margin:0">Aucune commande récente.</p>')+'</div>';
+      $('cmdNew').onclick=function(){ saisieLignes('commande'); };
+    });
+  });
+}
+function preparerCommande(four,lignes,note){
+  var f=null; STOCKCFG.fournisseurs.forEach(function(x){ if(x.id===four) f=x; });
+  var nomP=function(id){ var r='?'; STOCKCFG.produits.forEach(function(p){ if(p.id===id) r=p.nom+(p.unite?' ('+p.unite+')':''); }); return r; };
+  var corps='Bonjour,\n\nVoici notre commande pour LE DOUBLE (avenue Jules Hénin 26, Charleroi) :\n\n'+lignes.map(function(l){ return '- '+nomP(l.produit)+' : '+String(l.qte).replace('.',','); }).join('\n')+(note?'\n\nRemarque : '+note:'')+'\n\nMerci de nous confirmer la date de livraison.\n\nBien à vous,\nLE DOUBLE';
+  db.collection('commandes').add({fournisseur:four,lignes:lignes,note:note,texte:corps,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT}).catch(function(){});
+  ouvrirModal('<h2 style="font-size:22px">Commande prête</h2><textarea class="sel" id="cmdTxt" rows="10" style="font:inherit;font-size:15px">'+esc(corps)+'</textarea>'+
+    (f&&f.email?'<a class="btn prim" style="display:block;text-decoration:none" href="mailto:'+encodeURIComponent(f.email)+'?subject='+encodeURIComponent('Commande LE DOUBLE')+'&body='+encodeURIComponent(corps)+'">Ouvrir le mail pour '+esc(f.nom)+'</a>':'<p class="sub" style="margin:0">Pas d’adresse e-mail enregistrée pour ce fournisseur : copie le texte.</p>')+
+    '<button class="btn sec" id="cmdCopie">Copier le texte</button><button class="btn sec" id="cmdFin">Terminé</button>');
+  $('cmdCopie').onclick=function(){ var t=$('cmdTxt'); t.select(); try{ document.execCommand('copy'); toast('Texte copié'); }catch(e){} };
+  $('cmdFin').onclick=function(){ fermerModal(); vueCommandes(); };
+}
+/* ---------- notes au propriétaire ---------- */
+function vueNotes(){
+  db.collection('notes').where('jour','>=',jour(ajouterJours(new Date(),-30))).get().catch(function(){ return {docs:[]}; }).then(function(s){
+    var notes=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }).sort(function(a,b){return b.tsClient-a.tsClient});
+    var cat='Incident';
+    function render(){
+      $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Notes au propriétaire</h2>'+
+        '<div class="card"><div class="chips">'+['Incident','Demande','Info'].map(function(c){ return '<button class="chip'+(cat===c?' on':'')+'" data-cat="'+c+'">'+c+'</button>'; }).join('')+'</div>'+
+        '<textarea class="sel" id="noTxt" rows="4" maxlength="1000" placeholder="Écris ton message…" style="font:inherit"></textarea>'+
+        '<label class="switch"><input type="checkbox" id="noUrg"> Urgent</label><button class="btn prim" id="noOk">Envoyer au propriétaire</button></div>'+
+        '<h3 style="margin:22px 0 8px">Mes notes récentes</h3><div class="card">'+(notes.length?notes.map(function(n){
+          return '<div class="pt-ligne"><div><b>'+esc(n.categorie)+(n.urgent?' · urgent':'')+'</b><div class="sub" style="margin:2px 0 0">'+esc(n.texte)+'</div><div class="sub" style="margin:2px 0 0;font-size:13px">'+esc(n.jour)+' '+esc(n.h)+'</div></div>'+(n.lu?'<span class="etat" style="background:#E4F1E9;color:#11703A">Lue</span>':'<span class="etat" style="background:#FBEBD3;color:#7A4A05">Non lue</span>')+'</div>';
+        }).join(''):'<p class="sub" style="margin:0">Aucune note récente.</p>')+'</div>';
+    }
+    render();
+    $('vue').onclick=function(ev){
+      var b=ev.target.closest('button'); if(!b) return;
+      if(b.hasAttribute('data-cat')){ var t=$('noTxt').value; cat=b.getAttribute('data-cat'); render(); $('noTxt').value=t; return; }
+      if(b.id==='noOk'){
+        var t2=$('noTxt').value.trim(); if(t2.length<3){ alert('Le message est vide.'); return; }
+        b.disabled=true;
+        db.collection('notes').add({categorie:cat,texte:t2,urgent:$('noUrg').checked,lu:false,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+          .then(function(){ toast('Note envoyée'); vueNotes(); })
+          .catch(function(e){ b.disabled=false; alert('Envoi impossible ('+e.code+')'); });
+      }
+    };
+  });
+}
+
 function ouvrirModal(h){ $('mcard').innerHTML=h; $('modal').className='modal on'; }
 function fermerModal(){ $('modal').className='modal'; }
 })();
