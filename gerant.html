@@ -91,8 +91,9 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:15px}
 'use strict';
 var firebaseConfig={apiKey:"AIzaSyCnoN3QvJwxZ7iymoATF-yYgdYv-kKJNtM",authDomain:"ledouble.firebaseapp.com",projectId:"ledouble",storageBucket:"ledouble.firebasestorage.app",messagingSenderId:"948714321304",appId:"1:948714321304:web:820d0f89be59512d49a7ed"};
 var GERANT='mattheo@double.com';
-firebase.initializeApp(firebaseConfig);
-var auth=firebase.auth(), db=firebase.firestore();
+// session propre à cet espace : le propriétaire et le gérant ne se déconnectent plus l'un l'autre
+var appFb=firebase.initializeApp(firebaseConfig,'gerant');
+var auth=appFb.auth(), db=appFb.firestore();
 
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -112,7 +113,7 @@ $('lgPass').addEventListener('keydown',function(e){if(e.key==='Enter')$('lgBtn')
 $('btnOut').onclick=function(){auth.signOut()};
 auth.onAuthStateChanged(function(u){
   if(!u){ $('login').className='login'; $('app').className='hidden'; return; }
-  if((u.email||'').toLowerCase()!==GERANT){ $('lgErr').textContent='Accès réservé au gérant.'; auth.signOut(); return; }
+  if((u.email||'').toLowerCase()!==GERANT){ $('lgErr').textContent='Accès réservé au gérant (compte connecté : '+(u.email||'?')+').'; auth.signOut(); return; }
   $('login').className='login hidden'; $('app').className='';
   db.collection('config').doc('caisse').get().then(function(s){
     if(s.exists){ var c=s.data(); if(c.fondCaisse!=null) REG.fondCaisse=c.fondCaisse; if(c.messageEnveloppe) REG.messageEnveloppe=c.messageEnveloppe; }

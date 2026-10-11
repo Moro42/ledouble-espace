@@ -230,8 +230,9 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 'use strict';
 var firebaseConfig={apiKey:"AIzaSyCnoN3QvJwxZ7iymoATF-yYgdYv-kKJNtM",authDomain:"ledouble.firebaseapp.com",projectId:"ledouble",storageBucket:"ledouble.firebasestorage.app",messagingSenderId:"948714321304",appId:"1:948714321304:web:820d0f89be59512d49a7ed"};
 var PROPRIO='h.amrani0001@gmail.com';
-firebase.initializeApp(firebaseConfig);
-var auth=firebase.auth(), db=firebase.firestore();
+// session propre à cet espace : le propriétaire et le gérant ne se déconnectent plus l'un l'autre
+var appFb=firebase.initializeApp(firebaseConfig,'proprietaire');
+var auth=appFb.auth(), db=appFb.firestore();
 
 /* ---------- outils ---------- */
 function $(id){return document.getElementById(id)}
@@ -256,7 +257,7 @@ $('btnOut').onclick=function(){auth.signOut()};
 var demarre=false;
 auth.onAuthStateChanged(function(u){
   if(!u){ $('login').className='login'; $('app').className='hidden'; return; }
-  if((u.email||'').toLowerCase()!==PROPRIO){ $('lgErr').textContent='Accès réservé au propriétaire.'; auth.signOut(); return; }
+  if((u.email||'').toLowerCase()!==PROPRIO){ $('lgErr').textContent='Accès réservé au propriétaire (compte connecté : '+(u.email||'?')+').'; auth.signOut(); return; }
   $('login').className='login hidden'; $('app').className='';
   if(!demarre){ demarre=true; demarrer(); }
 });
