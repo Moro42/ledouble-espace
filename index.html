@@ -154,6 +154,8 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <div class="card"><h3 style="margin-top:0">Ventes additionnelles</h3><div id="dUpsell"></div></div>
       </div>
       <div class="card alert hidden" id="dAlertes" style="margin-top:12px"></div>
+      <h3>Caisse du jour</h3>
+      <div class="card" id="dCloture"><div class="empty">Chargement…</div></div>
       <h3>Journal en direct</h3>
       <div class="card" id="dJournal"><div class="empty">Connexion…</div></div>
     </section>
@@ -180,6 +182,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <div class="card"><h3 style="margin-top:0">Extras</h3><div id="hExt"></div></div>
       </div>
       <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Sorties d’argent</h3><div id="hSor"></div></div>
+      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Clôtures et écarts de caisse</h3><div id="hClo"></div></div>
     </section>
 
     <!-- CARTE -->
@@ -272,13 +275,13 @@ $('nav').onclick=function(e){
 
 /* ---------- analyse d'une liste d'événements ---------- */
 function analyser(evs){
-  var annules={}, r={sorties:0,nbSorties:0,sortiesMotifs:{},ca:0,nb:0,cash:0,carte:0,menus:0,lignesSand:0,avecFrites:0,avecBoisson:0,extras:0,ann:0,annMontant:0,tiroir:0,tiroirMotifs:{},heures:{},jours:{},prod:{},ext:{},liste:[]};
+  var annules={}, r={cashJ:{},sortJ:{},sorties:0,nbSorties:0,sortiesMotifs:{},ca:0,nb:0,cash:0,carte:0,menus:0,lignesSand:0,avecFrites:0,avecBoisson:0,extras:0,ann:0,annMontant:0,tiroir:0,tiroirMotifs:{},heures:{},jours:{},prod:{},ext:{},liste:[]};
   r.carteAnnulees=0; r.tardifsRembourses=0; r.tardifs=0;
-  evs.forEach(function(x){ if(x.type==='paiement'){ if(x.sous==='carte_annulee') r.carteAnnulees++; if(x.sous==='tardif_rembourse') r.tardifsRembourses++; } if(x.type==='annulation'){ annules[x.ref]=true; r.ann++; r.annMontant+=x.montant||0; } if(x.type==='tiroir'){ if(x.sortie){ r.sorties+=x.montant||0; r.nbSorties++; var c=x.categorie||'Autre'; r.sortiesMotifs[c]=(r.sortiesMotifs[c]||0)+(x.montant||0); } else { r.tiroir++; r.tiroirMotifs[x.motif]=(r.tiroirMotifs[x.motif]||0)+1; } } });
+  evs.forEach(function(x){ if(x.type==='paiement'){ if(x.sous==='carte_annulee') r.carteAnnulees++; if(x.sous==='tardif_rembourse') r.tardifsRembourses++; } if(x.type==='annulation'){ annules[x.ref]=true; r.ann++; r.annMontant+=x.montant||0; } if(x.type==='tiroir'){ if(x.sortie){ r.sortJ[x.jour]=(r.sortJ[x.jour]||0)+(x.montant||0); r.sorties+=x.montant||0; r.nbSorties++; var c=x.categorie||'Autre'; r.sortiesMotifs[c]=(r.sortiesMotifs[c]||0)+(x.montant||0); } else { r.tiroir++; r.tiroirMotifs[x.motif]=(r.tiroirMotifs[x.motif]||0)+1; } } });
   evs.forEach(function(x){
     if(x.type!=='vente' || annules[x.id]) return;
     r.ca+=x.total; r.nb++; if(x.tardif) r.tardifs++;
-    if(x.paiement==='cash') r.cash+=x.total; else { r.carte+=x.total; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+x.total; } }
+    if(x.paiement==='cash'){ r.cash+=x.total; r.cashJ[x.jour]=(r.cashJ[x.jour]||0)+x.total; } else { r.carte+=x.total; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+x.total; } }
     var h=new Date(x.tsClient).getHours(); r.heures[h]=(r.heures[h]||0)+x.total;
     r.jours[x.jour]=(r.jours[x.jour]||0)+x.total;
     var aMenu=false;
@@ -319,8 +322,10 @@ function liste(el,obj,fmt){
 var unsubJour=null, jourSuivi=null, premiersIds=null;
 function demarrer(){
   chargerNoms();
+  chargerRegC();
   suivreJour();
-  setInterval(function(){ if(jourSuivi!==jour()) suivreJour(); },60000);
+  suivreClotures();
+  setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); } },60000);
   db.collection('etat').doc('caisse').onSnapshot(function(s){ etatCaisse=s.exists?s.data():null; majEtatCaisse(); },function(){});
   setInterval(majEtatCaisse,30000);
 }
@@ -346,7 +351,7 @@ function suivreJour(){
   },function(e){ $('dJournal').innerHTML='<div class="err">Lecture refusée ('+e.code+')</div>'; });
 }
 function rendreDirect(evs,nouveaux){
-  var r=analyser(evs);
+  var r=analyser(evs); dernierR=r; majCloture();
   $('kCa').textContent=eur(r.ca);
   $('kCaSub').textContent='espèces '+eur(r.cash)+' · carte '+eur(r.carte)+(r.sorties?' · sorties −'+eur(r.sorties):'');
   $('kNb').textContent=r.nb;
@@ -364,7 +369,7 @@ function rendreDirect(evs,nouveaux){
   // alertes
   var al=[];
   if(r.ann) al.push(r.ann+' annulation'+(r.ann>1?'s':'')+' pour '+eur(r.annMontant));
-  if(r.sorties) al.push('Sorties d’argent : '+eur(r.sorties)+' ('+Object.keys(r.sortiesMotifs).map(function(k){return k+' '+eur(r.sortiesMotifs[k])}).join(', ')+') · espèces qui doivent être dans le tiroir : '+eur(r.cash-r.sorties)+' (hors fond de caisse)');
+  if(r.sorties) al.push('Sorties d’argent : '+eur(r.sorties)+' ('+Object.keys(r.sortiesMotifs).map(function(k){return k+' '+eur(r.sortiesMotifs[k])}).join(', ')+')');
   if(r.tardifs) al.push(r.tardifs+' paiement'+(r.tardifs>1?'s':'')+' carte reçu'+(r.tardifs>1?'s':'')+' après une annulation (enregistré'+(r.tardifs>1?'s':'')+')');
   if(r.tardifsRembourses) al.push(r.tardifsRembourses+' paiement'+(r.tardifsRembourses>1?'s':'')+' carte à rembourser dans SumUp');
   if(r.carteAnnulees) al.push(r.carteAnnulees+' paiement'+(r.carteAnnulees>1?'s':'')+' carte annulé'+(r.carteAnnulees>1?'s':'')+' sur le Solo');
@@ -389,6 +394,41 @@ function rendreDirect(evs,nouveaux){
   }).join(''):'<div class="empty">Aucune vente aujourd’hui pour l’instant. Elles apparaîtront ici en direct.</div>';
 }
 function isNew(x,n){return !!n[x.id]}
+
+/* ---------- CLÔTURES ---------- */
+var REGC={fondCaisse:5000,seuilEcart:200};
+function chargerRegC(){ db.collection('config').doc('caisse').get().then(function(s){ if(s.exists){ var c=s.data(); if(c.fondCaisse!=null) REGC.fondCaisse=c.fondCaisse; if(c.seuilEcart!=null) REGC.seuilEcart=c.seuilEcart; } majCloture(); }).catch(function(){}); }
+function bilanJour(clos,cash,sorties){
+  var ouv=null, clo=null;
+  clos.forEach(function(c){ if(c.type==='ouverture' && (!ouv||c.tsClient>ouv.tsClient)) ouv=c; if(c.type==='cloture' && (!clo||c.tsClient>clo.tsClient)) clo=c; });
+  var fond=ouv?(ouv.ok?(ouv.fondPrevu!=null?ouv.fondPrevu:REGC.fondCaisse):ouv.montant):(clo&&clo.fondPrevu!=null?clo.fondPrevu:REGC.fondCaisse);
+  var attendu=fond+(cash||0)-(sorties||0);
+  return {ouv:ouv,clo:clo,fond:fond,attendu:attendu,ecart:clo?clo.montant-attendu:null};
+}
+function ligneB(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
+var closJour=[], dernierR=null;
+function majCloture(){
+  var el=$('dCloture'); if(!el) return;
+  var r=dernierR||{cash:0,sorties:0};
+  var b=bilanJour(closJour,r.cash,r.sorties);
+  var h='';
+  h+=ligneB('Ouverture',b.ouv?(b.ouv.ok?'fond complet à '+b.ouv.h:'<span style="color:var(--danger)">différence : '+eur(b.ouv.montant)+' compté à '+b.ouv.h+' (prévu '+eur(b.ouv.fondPrevu)+')</span>'):'<span style="color:var(--warn)">pas encore faite</span>');
+  h+=ligneB('Fond de caisse',eur(b.fond));
+  h+=ligneB('+ Ventes en espèces',eur(r.cash));
+  if(r.sorties) h+=ligneB('− Sorties d’argent','−'+eur(r.sorties));
+  h+=ligneB('= Attendu dans le tiroir',eur(b.attendu),'font-weight:700');
+  if(b.clo){
+    var gros=Math.abs(b.ecart)>REGC.seuilEcart;
+    h+=ligneB('Compté par le gérant ('+b.clo.h+')',eur(b.clo.montant));
+    h+='<div class="row" style="background:'+(gros?'#F7E3E1':'#E4F1E9')+';border-radius:10px;padding:10px 12px;margin-top:6px;border:0"><span class="l"><b>Écart</b></span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
+    var env=b.clo.montant-(b.clo.fondPrevu!=null?b.clo.fondPrevu:REGC.fondCaisse);
+    if(env>0) h+='<p class="note">Enveloppe du jour : '+eur(env)+'</p>';
+  } else h+='<p class="note">La clôture du soir n’est pas encore faite : l’écart s’affichera ici dès que le gérant aura compté le tiroir.</p>';
+  el.innerHTML=h;
+}
+function suivreClotures(){
+  db.collection('clotures').where('jour','==',jour()).onSnapshot(function(s){ closJour=s.docs.map(function(d){return d.data()}); majCloture(); },function(e){ $('dCloture').innerHTML='<div class="err">Lecture refusée ('+e.code+')</div>'; });
+}
 
 /* ---------- HISTORIQUE ---------- */
 function initHistorique(){
@@ -416,6 +456,17 @@ function chargerHistorique(){
     for(var i=0;i<nbJ;i++){ var k=jour(dt); vals.push(r.jours[k]||0); lb.push(nbJ<=14?dt.toLocaleDateString('fr-BE',{weekday:'short'}).slice(0,3)+' '+dt.getDate():String(dt.getDate())); dt.setDate(dt.getDate()+1); }
     barres($('hBars'),vals,lb,-1);
     liste($('hProd'),r.prod); liste($('hExt'),r.ext,nomE);
+    db.collection('clotures').where('jour','>=',du).where('jour','<=',au).get().then(function(sc){
+      var parJour={}; sc.docs.forEach(function(d){ var c=d.data(); (parJour[c.jour]=parJour[c.jour]||[]).push(c); });
+      var jours=Object.keys(parJour).sort().reverse(), tot=0, n=0;
+      $('hClo').innerHTML=jours.length?jours.map(function(j){
+        var b=bilanJour(parJour[j],r.cashJ[j],r.sortJ[j]);
+        if(!b.clo) return '<div class="row"><span class="l">'+j+'</span><span class="note">pas de clôture</span></div>';
+        tot+=b.ecart; n++;
+        var gros=Math.abs(b.ecart)>REGC.seuilEcart;
+        return '<div class="row"><span class="l">'+new Date(j+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})+' · compté '+eur(b.clo.montant)+' / attendu '+eur(b.attendu)+'</span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
+      }).join('')+(n?'<div class="row"><span class="l"><b>Écart cumulé sur la période</b></span><b class="num">'+(tot>0?'+':'')+eur(tot)+'</b></div>':''):'<div class="empty">Aucune clôture sur la période.</div>';
+    }).catch(function(e){ $('hClo').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
     var ks=Object.keys(r.sortiesMotifs).sort(function(a,b){return r.sortiesMotifs[b]-r.sortiesMotifs[a]});
     $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
   }).catch(function(e){ $('hCa').textContent='—'; toast('Lecture impossible ('+e.code+')'); });
@@ -551,6 +602,8 @@ function rendreReglages(){
      '<label class="f">Sous le nom (adresse, TVA…)<input class="in" id="rSous" value="'+esc(r.sousEntete||'')+'"></label>'+
      '<label class="f">Bas du ticket<input class="in" id="rPied" value="'+esc(r.pied||'Merci et à bientôt !')+'"></label></div>'+
    '<h3>Imprimantes</h3><div id="rImps">'+r.imprimantes.map(carteImp).join('')+'</div><button class="btn small sec" id="rAddImp">+ Ajouter une imprimante</button>'+
+   '<h3>Fond de caisse et clôture</h3><div class="card form"><div class="inline"><label class="f">Fond de caisse €<input class="in px num" id="rFond" inputmode="decimal" value="'+vEur(r.fondCaisse!=null?r.fondCaisse:5000)+'"></label><label class="f">Écart signalé en rouge au-delà de €<input class="in px num" id="rSeuil" inputmode="decimal" value="'+vEur(r.seuilEcart!=null?r.seuilEcart:200)+'"></label></div>'+
+     '<label class="f">Message affiché au gérant après la clôture<input class="in" id="rEnv" value="'+esc(r.messageEnveloppe||'Mets le reste dans l’enveloppe du jour.')+'"></label></div>'+
    '<h3>Motifs de sortie d’argent</h3><div class="card form"><p class="note">Ce que le gérant peut choisir quand il prend de l’argent dans la caisse. « Autre… » est toujours proposé en plus, avec une précision obligatoire.</p><div id="rMotifs">'+(r.motifsSortie||MOTIFS_DEFAUT).map(function(m,i){return '<div class="inline" style="margin-bottom:8px"><input class="in" data-motif value="'+esc(m)+'" style="flex:1"><button class="btn small danger" data-delmotif="'+i+'">✕</button></div>'}).join('')+'</div><button class="btn small sec" id="rAddMotif">+ Ajouter un motif</button></div>'+
    '<h3>Sécurité</h3><div class="card form">'+
      '<label class="f">Code gérant (4 chiffres, laisse vide pour garder celui de la caisse)<input class="in px" id="rPin" inputmode="numeric" maxlength="4" value="'+esc(r.pin||'')+'"></label>'+
@@ -564,6 +617,7 @@ function rendreReglages(){
 function lireReglages(){
   var r=reg, err=[];
   r.motifsSortie=Array.prototype.map.call(document.querySelectorAll('[data-motif]'),function(x){return x.value.trim()}).filter(Boolean);
+  var fc=cents($('rFond').value), se=cents($('rSeuil').value); if(fc==null) err.push('Fond de caisse invalide'); r.fondCaisse=fc; r.seuilEcart=se==null?200:se; r.messageEnveloppe=$('rEnv').value.trim()||'Mets le reste dans l’enveloppe du jour.';
   r.impression=$('rImp').checked; r.boncuisine=$('rCui').checked;
   r.entete=$('rEnt').value.trim()||'LE DOUBLE'; r.sousEntete=$('rSous').value.trim(); r.pied=$('rPied').value.trim();
   r.nom=$('rNom').value.trim()||'LE DOUBLE';
@@ -585,7 +639,7 @@ $('regSave').onclick=function(){
   if(err.length){ alert('À corriger :\n• '+err.join('\n• ')); return; }
   reg.maj=Date.now();
   $('regSave').disabled=true;
-  db.collection('config').doc('caisse').set(reg).then(function(){ toast('Réglages envoyés à la caisse'); $('regEtat').textContent='Enregistrés à l’instant'; })
+  db.collection('config').doc('caisse').set(reg).then(function(){ REGC.fondCaisse=reg.fondCaisse; REGC.seuilEcart=reg.seuilEcart; majCloture(); toast('Réglages envoyés à la caisse'); $('regEtat').textContent='Enregistrés à l’instant'; })
     .catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); }).then(function(){ $('regSave').disabled=false; });
 };
 
