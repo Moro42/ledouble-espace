@@ -349,7 +349,8 @@ function analyser(evs){
   evs.forEach(function(x){
     if(x.type!=='vente' || annules[x.id]) return;
     r.ca+=x.total; r.nb++; if(x.tardif) r.tardifs++;
-    if(x.paiement==='cash'){ r.cash+=x.total; r.cashJ[x.jour]=(r.cashJ[x.jour]||0)+x.total; } else { r.carte+=x.total; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+x.total; } }
+    if(x.paiement==='mixte'){ var pe=x.partEspeces||0, pc=x.partCarte||(x.total-pe); r.cash+=pe; r.cashJ[x.jour]=(r.cashJ[x.jour]||0)+pe; r.carte+=pc; r.mixtes=(r.mixtes||0)+1; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+pc; } }
+    else if(x.paiement==='cash'){ r.cash+=x.total; r.cashJ[x.jour]=(r.cashJ[x.jour]||0)+x.total; } else { r.carte+=x.total; if(x.carte==='manuel'){ r.manuels=(r.manuels||0)+1; r.manuelsMontant=(r.manuelsMontant||0)+x.total; } }
     var dt=new Date(x.tsClient), h=dt.getHours(); r.heures[h]=(r.heures[h]||0)+x.total;
     r.clientsH[h]=(r.clientsH[h]||0)+1;
     var q=h*4+Math.floor(dt.getMinutes()/15); r.q15[x.jour+'|'+q]=(r.q15[x.jour+'|'+q]||0)+1;
@@ -433,7 +434,7 @@ var modeBarres='ca', dernierEvs=[];
 function rendreDirect(evs,nouveaux){
   var r=analyser(evs); dernierR=r; majCloture();
   $('kCa').textContent=eur(r.ca);
-  $('kCaSub').textContent='espèces '+eur(r.cash)+' · carte '+eur(r.carte)+(r.sorties?' · sorties −'+eur(r.sorties):'');
+  $('kCaSub').textContent='espèces '+eur(r.cash)+' · carte '+eur(r.carte)+(r.mixtes?' (dont '+r.mixtes+' mixte'+(r.mixtes>1?'s':'')+')':'')+(r.sorties?' · sorties −'+eur(r.sorties):'');
   $('kNb').textContent=r.nb;
   $('kNbSub').textContent=r.ann?r.ann+' annulé'+(r.ann>1?'s':''):'';
   $('kMoy').textContent=r.nb?eur(r.ca/r.nb):'—';
@@ -473,7 +474,8 @@ function rendreDirect(evs,nouveaux){
     var lib='',mt='',tag='';
     if(x.type==='vente'){
       var an=r.annules[x.id];
-      tag='<span class="tag '+(an?'ann':(x.paiement==='cash'?'cash':(x.carte==='manuel'?'tir':'carte')))+'">'+(an?'ANNULÉ':(x.paiement==='cash'?'Espèces':(x.carte==='solo'?'Carte · Solo':(x.carte==='manuel'?'Carte · manuelle':'Carte'))))+'</span>';
+      tag=x.paiement==='mixte'&&!an?'<span class="tag carte">Mixte · '+eur(x.partEspeces||0)+' esp. + '+eur(x.partCarte||0)+' carte'+(x.carte==='manuel'?' (manuelle)':'')+'</span>':
+        '<span class="tag '+(an?'ann':(x.paiement==='cash'?'cash':(x.carte==='manuel'?'tir':'carte')))+'">'+(an?'ANNULÉ':(x.paiement==='cash'?'Espèces':(x.carte==='solo'?'Carte · Solo':(x.carte==='manuel'?'Carte · manuelle':'Carte'))))+'</span>';
       lib='<b>n°'+x.n+'</b>'+(x.tardif?' <span class="tag tir">reçu après annulation</span>':'')+' · '+esc((x.lignes||[]).map(function(l){return (l.q>1?l.q+'× ':'')+(l.m?'Menu ':'')+nomP(l.p)+(l.s==='seule'?'':' '+l.s)}).join(', '));
       mt=eur(x.total);
     } else if(x.type==='annulation'){ tag='<span class="tag ann">Annulation</span>'; lib='Ticket n°'+x.n+' · '+esc(x.motif); mt='−'+eur(x.montant); }
@@ -985,7 +987,7 @@ function lignesExport(col,docs){
   var nomsP=function(l){ return (l||[]).map(function(x){ return (x.q>1?x.q+'× ':'')+(x.m?'Menu ':'')+nomP(x.p)+(x.s==='seule'?'':' '+x.s)+((x.ex||[]).length?' +'+x.ex.map(nomE).join('+'):''); }).join(' | '); };
   return docs.map(function(d){
     var x=d.data();
-    if(col==='evenements') return {Jour:x.jour,Heure:x.h||'',Type:x.type,'N° ticket':x.n||'',Détail:x.type==='vente'?nomsP(x.lignes):(x.motif||x.sous||''),'Montant €':euros(x.total!=null?x.total:x.montant),Paiement:x.paiement||'',Carte:x.carte||'','Réf. SumUp':x.sumup&&x.sumup.code||'','Reçu €':euros(x.recu),'Rendu €':euros(x.rendu),Sortie:x.sortie?'oui':'',Quantité:x.quantite||'',Via:x.via||'',Identifiant:x.id||d.id};
+    if(col==='evenements') return {Jour:x.jour,Heure:x.h||'',Type:x.type,'N° ticket':x.n||'',Détail:x.type==='vente'?nomsP(x.lignes):(x.motif||x.sous||''),'Montant €':euros(x.total!=null?x.total:x.montant),Paiement:x.paiement||'','Part espèces €':x.paiement==='mixte'?euros(x.partEspeces):(x.paiement==='cash'?euros(x.total):''),'Part carte €':x.paiement==='mixte'?euros(x.partCarte):(x.paiement==='carte'?euros(x.total):''),Carte:x.carte||'','Réf. SumUp':x.sumup&&x.sumup.code||'','Reçu €':euros(x.recu),'Rendu €':euros(x.rendu),Sortie:x.sortie?'oui':'',Quantité:x.quantite||'',Via:x.via||'',Identifiant:x.id||d.id};
     if(col==='clotures') return {Jour:x.jour,Heure:x.h||'',Type:x.type,'Montant compté €':euros(x.montant),'Fond prévu €':euros(x.fondPrevu),'Fond complet':x.ok===true?'oui':(x.ok===false?'non':''),Détail:x.detail?JSON.stringify(x.detail):''};
     if(col==='pointages') return {Jour:x.jour,Heure:x.h||'',Type:x.type,Personne:x.membre?nomM(x.membre):'',Annule:x.ref||''};
     if(col==='planning') return {Semaine:x.semaine||d.id,Créneaux:(x.creneaux||[]).map(function(c){ return nomM(c.membre)+' '+c.jour+' '+c.debut+'-'+c.fin; }).join(' | ')};
