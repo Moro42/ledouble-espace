@@ -103,6 +103,23 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 .hm{border-collapse:separate;border-spacing:3px;width:100%;min-width:520px}
 .hm th{font-size:12px;color:var(--ink-soft);font-weight:700;padding:4px}
 .hm td{text-align:center;font-size:13px;font-weight:700;border-radius:6px;padding:8px 2px;min-width:34px}
+.ass-fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0));z-index:40;background:var(--ink);color:var(--gold);border-radius:999px;padding:14px 20px;font-weight:800;font-size:16px;box-shadow:0 8px 24px -10px rgba(0,0,0,.5)}
+.ass-panel{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0));top:calc(80px + env(safe-area-inset-top,0));width:min(440px,calc(100vw - 36px));z-index:45;background:var(--surface);border:1px solid var(--line);border-radius:18px;display:none;flex-direction:column;overflow:hidden;box-shadow:0 18px 50px -20px rgba(0,0,0,.45)}
+.ass-panel.on{display:flex}
+.ass-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ass-head .grow{flex:1}
+.ass-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ass-me{align-self:flex-end;background:var(--ink);color:#fff;border-radius:14px 14px 3px 14px;padding:10px 13px;max-width:85%;font-size:15px}
+.ass-ai{align-self:flex-start;background:#F4F1EC;border-radius:14px 14px 14px 3px;padding:10px 13px;max-width:94%;font-size:15px;line-height:1.5}
+.ass-prop{border:1.5px solid var(--accent);background:#FBF6EE;border-radius:12px;padding:10px 12px;display:grid;gap:6px;font-size:14px}
+.ass-prop .ok{color:var(--ok);font-weight:700}.ass-prop .err{color:var(--danger);font-weight:700}
+.ass-diff{white-space:pre-wrap;font-size:12px;background:#fff;border-radius:8px;padding:8px;max-height:200px;overflow:auto}
+.ass-diff .moins{color:var(--danger)}.ass-diff .plus{color:var(--ok)}
+.ass-sug{display:flex;gap:6px;overflow-x:auto;padding:0 12px 8px}
+.ass-sug button{border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:13px;white-space:nowrap;color:var(--ink-soft)}
+.ass-in{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.ass-in textarea{flex:1;border:1.5px solid var(--line);border-radius:12px;padding:10px;font:inherit;font-size:15px;resize:none}
+@media (max-width:600px){.ass-panel{right:8px;left:8px;width:auto;top:calc(70px + env(safe-area-inset-top,0));bottom:8px}}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;display:none}
 .toast.on{display:block}
 
@@ -193,7 +210,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <div class="kpi"><span>Annulations</span><b class="num" id="hAnn">—</b><small id="hAnnSub"></small></div>
       </div>
       <div class="card" style="margin-top:12px"><h3 style="margin-top:0">CA par jour</h3><div class="bars" id="hBars"></div></div>
-      <div class="card scroll" style="margin-top:12px"><h3 style="margin-top:0">Clients par heure · moyenne sur la période</h3><div id="hClients"></div></div>
+      <div class="card scroll" style="margin-top:12px"><div class="inline" style="justify-content:space-between;margin-bottom:6px"><h3 style="margin:0" id="hmTitre">Clients par heure · moyenne sur la période</h3><div class="bascule"><button data-hm="clients" aria-pressed="true">Clients</button><button data-hm="ca" aria-pressed="false">Chiffre d’affaires</button><button data-hm="ticket" aria-pressed="false">Ticket moyen</button></div></div><div id="hClients"></div></div>
       <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Boissons par jour</h3><div class="bars" id="hBoBars"></div><div id="hBoissons"></div></div>
       <div class="grid two" style="margin-top:12px">
         <div class="card"><h3 style="margin-top:0">Produits vendus</h3><div id="hProd"></div></div>
@@ -244,6 +261,12 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h2>Réglages de la caisse</h2>
       <div id="regForm"><div class="empty">Chargement…</div></div>
       <div class="savebar"><span class="note" id="regEtat"></span><button class="btn prim" id="regSave">Enregistrer les réglages</button></div>
+      <h3>Assistant IA</h3>
+      <div class="card form">
+        <label class="f">Adresse du relais Cloudflare<input class="in" id="assRelais" placeholder="https://ledouble-assistant.xxxx.workers.dev" autocomplete="off"></label>
+        <label class="f">Ce que l’assistant doit savoir sur LE DOUBLE (tu peux compléter ou corriger à tout moment)<textarea class="in" id="assBriefing" rows="10" style="padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit"></textarea></label>
+        <div class="inline"><button class="btn prim" id="assSave">Enregistrer</button><button class="btn danger" id="assAnnulerPub">Annuler la dernière modification du site</button><span class="note" id="assEtat"></span></div>
+      </div>
       <h3>Données</h3>
       <div class="card form" id="donnees">
         <b>Exporter tout l’historique</b>
@@ -283,6 +306,13 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       </div>
     </section>
   </main>
+</div>
+<button class="ass-fab" id="assFab" aria-label="Ouvrir l’assistant">✦ Assistant</button>
+<div class="ass-panel" id="assPanel" role="dialog" aria-label="Assistant LE DOUBLE">
+  <div class="ass-head"><b>Assistant LE DOUBLE</b><span class="grow"></span><button class="btn small sec" id="assNouveau">Nouvelle discussion</button><button class="btn small sec" id="assFermer" aria-label="Fermer">✕</button></div>
+  <div class="ass-msgs" id="assMsgs"></div>
+  <div class="ass-sug"><button data-sug="Fais-moi le bilan de la semaine en cours, avec les points à surveiller.">Bilan de la semaine</button><button data-sug="Analyse mes écarts de caisse et mes annulations des 30 derniers jours.">Écarts de caisse</button><button data-sug="Quand faut-il être à deux ? Analyse l’affluence des 4 dernières semaines.">Quand être à deux ?</button><button data-sug="Prépare la commande fournisseurs de la semaine d’après le stock et les ventes.">Prépare la commande</button></div>
+  <div class="ass-in"><textarea id="assIn" rows="2" placeholder="Pose ta question…"></textarea><button class="btn prim" id="assEnvoyer">Envoyer</button></div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -343,7 +373,7 @@ $('nav').onclick=function(e){
 
 /* ---------- analyse d'une liste d'événements ---------- */
 function analyser(evs){
-  var annules={}, r={boissons:0,boMenu:0,boSupp:0,boSeules:0,boJ:{},clientsBoisson:0,clientsH:{},q15:{},semH:{},joursOuverts:{},cashJ:{},sortJ:{},sorties:0,nbSorties:0,sortiesMotifs:{},ca:0,nb:0,cash:0,carte:0,menus:0,lignesSand:0,avecFrites:0,avecBoisson:0,extras:0,ann:0,annMontant:0,tiroir:0,tiroirMotifs:{},heures:{},jours:{},prod:{},ext:{},liste:[]};
+  var annules={}, r={semCA:{},boissons:0,boMenu:0,boSupp:0,boSeules:0,boJ:{},clientsBoisson:0,clientsH:{},q15:{},semH:{},joursOuverts:{},cashJ:{},sortJ:{},sorties:0,nbSorties:0,sortiesMotifs:{},ca:0,nb:0,cash:0,carte:0,menus:0,lignesSand:0,avecFrites:0,avecBoisson:0,extras:0,ann:0,annMontant:0,tiroir:0,tiroirMotifs:{},heures:{},jours:{},prod:{},ext:{},liste:[]};
   r.carteAnnulees=0; r.tardifsRembourses=0; r.tardifs=0;
   evs.forEach(function(x){ if(x.type==='paiement'){ if(x.sous==='carte_annulee') r.carteAnnulees++; if(x.sous==='tardif_rembourse') r.tardifsRembourses++; } if(x.type==='annulation'){ annules[x.ref]=true; r.ann++; r.annMontant+=x.montant||0; } if(x.type==='tiroir'){ if(x.mixte){ r.tiroirMixte=(r.tiroirMixte||0)+1; } else if(x.sortie){ r.sortJ[x.jour]=(r.sortJ[x.jour]||0)+(x.montant||0); r.sorties+=x.montant||0; r.nbSorties++; var c=x.categorie||'Autre'; r.sortiesMotifs[c]=(r.sortiesMotifs[c]||0)+(x.montant||0); } else { r.tiroir++; r.tiroirMotifs[x.motif]=(r.tiroirMotifs[x.motif]||0)+1; } } });
   evs.forEach(function(x){
@@ -354,7 +384,7 @@ function analyser(evs){
     var dt=new Date(x.tsClient), h=dt.getHours(); r.heures[h]=(r.heures[h]||0)+x.total;
     r.clientsH[h]=(r.clientsH[h]||0)+1;
     var q=h*4+Math.floor(dt.getMinutes()/15); r.q15[x.jour+'|'+q]=(r.q15[x.jour+'|'+q]||0)+1;
-    var dow=(new Date(x.jour+'T12:00:00').getDay()+6)%7; r.semH[dow+'|'+h]=(r.semH[dow+'|'+h]||0)+1; r.joursOuverts[x.jour]=dow;
+    var dow=(new Date(x.jour+'T12:00:00').getDay()+6)%7; r.semH[dow+'|'+h]=(r.semH[dow+'|'+h]||0)+1; r.semCA[dow+'|'+h]=(r.semCA[dow+'|'+h]||0)+x.total; r.joursOuverts[x.jour]=dow;
     r.jours[x.jour]=(r.jours[x.jour]||0)+x.total;
     var aMenu=false, nbBo=0;
     (x.lignes||[]).forEach(function(l){
@@ -400,6 +430,7 @@ var unsubJour=null, jourSuivi=null, premiersIds=null;
 function demarrer(){
   chargerNoms();
   chargerRegC();
+  chargerAssistant();
   setTimeout(function(){ try{ chargerPropositionsPastille(); }catch(e){} },1500);
   suivreJour();
   suivreClotures();
@@ -490,25 +521,34 @@ function rendreDirect(evs,nouveaux){
 function isNew(x,n){return !!n[x.id]}
 
 /* ---------- CLIENTS PAR HEURE (historique) ---------- */
+var modeHm='clients', dernierRH=null;
+document.addEventListener('click',function(e){ var b=e.target.closest('[data-hm]'); if(!b) return; modeHm=b.getAttribute('data-hm'); Array.prototype.forEach.call(document.querySelectorAll('[data-hm]'),function(x){ x.setAttribute('aria-pressed',String(x===b)); }); if(dernierRH) rendreClientsHeure(dernierRH); });
 function rendreClientsHeure(r){
+  dernierRH=r;
+  $('hmTitre').textContent=(modeHm==='ca'?'Chiffre d’affaires par heure':modeHm==='ticket'?'Ticket moyen par heure':'Clients par heure')+' · moyenne sur la période';
   var nbJ=[0,0,0,0,0,0,0]; Object.keys(r.joursOuverts).forEach(function(j){ nbJ[r.joursOuverts[j]]++; });
   var hMin=24,hMax=0; Object.keys(r.semH).forEach(function(k){ var h=+k.split('|')[1]; if(h<hMin)hMin=h; if(h>hMax)hMax=h; });
   if(hMin>hMax){ $('hClients').innerHTML='<div class="empty">Aucune vente sur la période.</div>'; return; }
   var seuil=REGC.seuilDeux||25, max=0, moy={};
-  Object.keys(r.semH).forEach(function(k){ var d=+k.split('|')[0]; moy[k]=nbJ[d]?r.semH[k]/nbJ[d]:0; if(moy[k]>max) max=moy[k]; });
+  Object.keys(r.semH).forEach(function(k){ var d=+k.split('|')[0];
+    if(modeHm==='ca') moy[k]=nbJ[d]?(r.semCA[k]||0)/nbJ[d]:0;
+    else if(modeHm==='ticket') moy[k]=r.semH[k]?(r.semCA[k]||0)/r.semH[k]:0;
+    else moy[k]=nbJ[d]?r.semH[k]/nbJ[d]:0;
+    if(moy[k]>max) max=moy[k]; });
+  function fmtV(v){ return modeHm==='clients'?(v?Math.round(v):''):(v?(modeHm==='ca'?Math.round(v/100)+' €':eur(v)):''); }
   var J=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
   var h='<table class="hm"><tr><th></th>'; for(var x=hMin;x<=hMax;x++) h+='<th>'+x+'h</th>'; h+='</tr>';
   for(var d=0;d<7;d++){
     if(!nbJ[d]) continue;
     h+='<tr><th>'+J[d]+'</th>';
     for(var hh=hMin;hh<=hMax;hh++){
-      var v=moy[d+'|'+hh]||0, t=max?v/max:0, fort=v>=seuil;
+      var v=moy[d+'|'+hh]||0, t=max?v/max:0, fort=modeHm==='clients'&&v>=seuil;
       var bg='rgba(168,122,58,'+(0.08+t*0.85).toFixed(2)+')';
-      h+='<td style="background:'+bg+';color:'+(t>0.55?'#fff':'var(--ink)')+(fort?';outline:2px solid var(--ink);outline-offset:-2px':'')+'" title="'+J[d]+' '+hh+'h : '+v.toFixed(1).replace('.',',')+' clients en moyenne">'+(v?Math.round(v):'')+'</td>';
+      h+='<td style="background:'+bg+';color:'+(t>0.55?'#fff':'var(--ink)')+(fort?';outline:2px solid var(--ink);outline-offset:-2px':'')+'" title="'+J[d]+' '+hh+'h : '+(modeHm==='clients'?v.toFixed(1).replace('.',',')+' clients en moyenne':modeHm==='ca'?eur(v)+' en moyenne':'ticket moyen '+eur(v))+'">'+fmtV(v)+'</td>';
     }
     h+='</tr>';
   }
-  h+='</table><p class="note">Moyenne de clients par heure, calculée sur les jours où la caisse a vendu. Les cases entourées dépassent le seuil « à deux » ('+seuil+' clients/heure, réglable dans Réglages caisse).</p>';
+  h+='</table><p class="note">'+(modeHm==='clients'?'Moyenne de clients par heure, calculée sur les jours où la caisse a vendu. Les cases entourées dépassent le seuil « à deux » ('+seuil+' clients/heure, réglable dans Réglages caisse).':modeHm==='ca'?'Chiffre d’affaires moyen par heure, calculé sur les jours où la caisse a vendu.':'Ticket moyen par heure sur la période.')+'</p>';
   $('hClients').innerHTML=h;
 }
 
@@ -889,6 +929,220 @@ document.addEventListener('click',function(ev){
   db.collection('notes').doc(b.getAttribute('data-lu')).update({lu:true,luLe:Date.now()}).catch(function(e){ alert('Action impossible ('+e.code+')'); });
 });
 
+/* =====================================================================
+   ASSISTANT IA (espace propriétaire)
+   Les outils de lecture s'exécutent ici, avec les droits du propriétaire.
+   Toute modification est proposée sous forme de carte à valider.
+   ===================================================================== */
+var ASS={relais:'',briefing:'',conv:[],convId:null,occupe:false,derniereVersion:null};
+var BRIEFING_DEFAUT=[
+'LE DOUBLE (by Snack Waterloo) est une sandwicherie de vente à emporter, avenue Jules Hénin 26 à Charleroi (Belgique).',
+'Ouverture : du lundi au vendredi, de 10h à 19h. Chiffre d’affaires d’environ 1 000 € par jour, ticket moyen d’environ 5,50 €.',
+'Carte : sandwichs en demi-baguette (Hamburger, Mexicanos, Poulet pané, Mulky) en format Double ou Simple, Menu Double Hamburger à 5,50 € (frites + boisson), suppléments frites et boisson, extras (cheddar, gouda, feta, oignons, jalapeños, full crudités, œufs), boisson seule. Les prix exacts sont dans la configuration « carte ».',
+'Organisation : la caisse du comptoir (tablette Android) ne fait que la vente ; un gérant fixe (Mattheo) gère sur place depuis sa tablette (ouverture et clôture à l’aveugle, pointage, planning, stock, pertes, commandes, notes) et ne voit pas le chiffre d’affaires ; le propriétaire (Hicham) suit tout à distance.',
+'Paiement : espèces, carte via un terminal SumUp Solo relié à la caisse, ou mixte. Fond de caisse de 50 €. Les baguettes coûtent 0,75 € pièce.',
+'Équipe : un gérant fixe et des étudiants (quota de 650 h par an à cotisations réduites). Objectif : être à deux seulement pendant les rushs (seuil réglable de clients par heure).',
+'Objectifs du propriétaire : rentabilité, contrôle total (tout est tracé), réduction des pertes et des écarts de caisse, hausse du ticket moyen (menus, frites, boissons, extras), plannings optimisés.',
+'Ton rôle : analyser les données réelles, repérer les failles (écarts, annulations, sorties d’argent, pertes, sur ou sous-effectif), faire des recommandations chiffrées et concrètes, préparer plannings et commandes, et proposer des améliorations de l’espace propriétaire.'
+].join('\n');
+
+var OUTILS=[
+ {name:'lire_ventes',description:'Analyse des ventes sur une période : totaux, par jour, par heure, produits, extras, boissons, paiements, annulations, sorties d’argent, menus et ventes additionnelles. Dates au format AAAA-MM-JJ.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
+ {name:'lire_controle_caisse',description:'Ouvertures, clôtures à l’aveugle, attendu, compté et écarts de caisse jour par jour sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
+ {name:'lire_equipe',description:'Membres de l’équipe, planning et heures prestées (pointages), retards, sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
+ {name:'lire_stock',description:'Produits suivis, stock actuel, livraisons, inventaires et pertes des 60 derniers jours, commandes récentes.',input_schema:{type:'object',properties:{}}},
+ {name:'lire_config',description:'Lit une configuration : carte (produits et prix), caisse (réglages, motifs de sortie, seuils), stock (produits et fournisseurs).',input_schema:{type:'object',properties:{nom:{type:'string',enum:['carte','caisse','stock']}},required:['nom']}},
+ {name:'proposer_modification_donnees',description:'Propose de remplacer une configuration (carte, caisse ou stock) par une nouvelle version complète, ou de remplacer le planning d’une semaine. Le propriétaire valide d’un clic. Lis toujours la configuration actuelle avant, et ne change que ce qui est demandé.',input_schema:{type:'object',properties:{cible:{type:'string',enum:['carte','caisse','stock','planning']},semaine:{type:'string',description:'Pour le planning : date du lundi AAAA-MM-JJ'},nouveau:{type:'object',description:'Document complet (carte, caisse ou stock) ou {creneaux:[{membre,jour,debut,fin}]} pour le planning'},resume:{type:'string'}},required:['cible','nouveau','resume']}},
+ {name:'lire_site',description:'Lit le code de l’espace propriétaire (index.html) ou gérant (gerant.html) : sans recherche, renvoie le plan ; avec une recherche, renvoie les passages qui la contiennent.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},recherche:{type:'string'}},required:['fichier']}},
+ {name:'proposer_modification_site',description:'Propose une modification du code de index.html ou gerant.html sous forme de remplacements exacts (ancien → nouveau). Chaque « ancien » doit apparaître une seule fois. Le site est testé automatiquement avant que le propriétaire publie.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},modifications:{type:'array',items:{type:'object',properties:{ancien:{type:'string'},nouveau:{type:'string'}},required:['ancien','nouveau']}},resume:{type:'string'}},required:['fichier','modifications','resume']}}
+];
+
+function chargerAssistant(){
+  return db.collection('config').doc('assistant').get().then(function(s){
+    var c=s.exists?s.data():{}; ASS.relais=c.relais||''; ASS.briefing=c.briefing||BRIEFING_DEFAUT; ASS.derniereVersion=c.derniereVersion||null;
+  }).catch(function(){ ASS.briefing=BRIEFING_DEFAUT; });
+}
+function appelRelais(chemin,corps){
+  if(!ASS.relais) return Promise.reject(new Error('Adresse du relais non réglée (Réglages caisse → Assistant)'));
+  return auth.currentUser.getIdToken().then(function(t){
+    return fetch(ASS.relais.replace(/\/$/,'')+chemin,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(corps||{})});
+  }).then(function(r){ return r.json().then(function(d){ if(!r.ok||d.erreur) throw new Error(d.erreur||('Erreur '+r.status)); return d; }); });
+}
+
+/* ---------- outils de lecture ---------- */
+function compacter(o){ var s=JSON.stringify(o); return s.length>60000?s.slice(0,60000)+'…(tronqué)':s; }
+function outilVentes(a){
+  return db.collection('evenements').where('jour','>=',a.du).where('jour','<=',a.au).get().then(function(s){
+    var evs=s.docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}), r=analyser(evs);
+    var parJour={}; evs.forEach(function(x){ if(x.type==='vente'&&!r.annules[x.id]){ var j=parJour[x.jour]=parJour[x.jour]||{ca:0,clients:0}; j.ca+=x.total; j.clients++; } });
+    Object.keys(parJour).forEach(function(k){ parJour[k].ca=parJour[k].ca/100; });
+    var heures={}; Object.keys(r.clientsH).forEach(function(h){ heures[h+'h']={clients:r.clientsH[h],ca:(r.heures[h]||0)/100}; });
+    var annul=evs.filter(function(x){return x.type==='annulation'}).map(function(x){return {jour:x.jour,heure:x.h,ticket:x.n,montant:(x.montant||0)/100,paiement:x.paiement,motif:x.motif}});
+    var tiroir=evs.filter(function(x){return x.type==='tiroir'}).map(function(x){return {jour:x.jour,heure:x.h,motif:x.motif,montant:x.montant?x.montant/100:null,via:x.via}});
+    return compacter({periode:a,euros:true,ca:r.ca/100,clients:r.nb,ticketMoyen:r.nb?Math.round(r.ca/r.nb)/100:0,especes:r.cash/100,carte:r.carte/100,mixtes:r.mixtes||0,menusPctClients:r.nb?Math.round(r.menus*100/r.nb):0,
+      sandwichsAvecFritesPct:r.lignesSand?Math.round(r.avecFrites*100/r.lignesSand):0,sandwichsAvecBoissonPct:r.lignesSand?Math.round(r.avecBoisson*100/r.lignesSand):0,extras:r.extras,
+      boissons:{total:r.boissons,menu:r.boMenu,supplement:r.boSupp,seules:r.boSeules},produits:r.prod,extrasDetail:r.ext,parJour:parJour,parHeure:heures,
+      annulations:annul,tiroirEtSorties:tiroir,sortiesTotal:r.sorties/100,paiementsCarteManuels:r.manuels||0});
+  });
+}
+function outilControle(a){
+  return Promise.all([db.collection('clotures').where('jour','>=',a.du).where('jour','<=',a.au).get(),db.collection('evenements').where('jour','>=',a.du).where('jour','<=',a.au).get()]).then(function(res){
+    var r=analyser(res[1].docs.map(function(d){return d.data()})), par={};
+    res[0].docs.forEach(function(d){ var c=d.data(); (par[c.jour]=par[c.jour]||[]).push(c); });
+    var jours=Object.keys(par).sort().map(function(j){ var b=bilanJour(par[j],r.cashJ[j],r.sortJ[j]); return {jour:j,fond:b.fond/100,especesVendues:(r.cashJ[j]||0)/100,sorties:(r.sortJ[j]||0)/100,attendu:b.attendu/100,compte:b.clo?b.clo.montant/100:null,ecart:b.ecart!=null?b.ecart/100:null,ouvertureOk:b.ouv?b.ouv.ok:null}; });
+    return compacter({periode:a,seuilEcart:REGC.seuilEcart/100,fondCaisse:REGC.fondCaisse/100,jours:jours});
+  });
+}
+function outilEquipe(a){
+  return Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get(),db.collection('pointages').where('jour','>=',a.du).where('jour','<=',a.au).get()]).then(function(res){
+    var membres=res[0].exists?(res[0].data().membres||[]):[], pv=res[1].exists?(res[1].data().membres||{}):{};
+    var pts=res[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}), refs={}, par={};
+    pts.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
+    pts.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (par[k]=par[k]||[]).push(p); if(refs[p.__id]) par[k].push(refs[p.__id]); });
+    var heures={}; Object.keys(par).forEach(function(k){ var m=k.split('|')[0], r=intervalles(par[k],k.split('|')[1]<jour()); heures[m]=(heures[m]||0)+r.min; });
+    var lus=[], d0=lundiP(new Date(a.du+'T12:00:00')); while(jour(d0)<=a.au){ lus.push(jour(d0)); d0=plusJ(d0,7); }
+    return Promise.all(lus.map(function(lu){ return db.collection('planning').doc(lu).get().then(function(s){ return {semaine:lu,creneaux:s.exists?(s.data().creneaux||[]):[]}; }); })).then(function(pl){
+      return compacter({periode:a,membres:membres.map(function(m){ var x=pv[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif,contrat:x.contrat,heuresSemaine:x.heuresSemaine,coutHoraireEuros:(x.coutHoraire||0)/100,heuresPresteesPeriode:Math.round((heures[m.id]||0)/6)/10}; }),plannings:pl});
+    });
+  });
+}
+function outilStock(){
+  var depuis=jour(new Date(Date.now()-60*864e5));
+  return Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',depuis).get(),db.collection('commandes').where('jour','>=',depuis).get()]).then(function(res){
+    SC=res[0].exists?res[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[];
+    SMV=res[1].docs.map(function(d){return d.data()}).sort(function(a,b){return a.tsClient-b.tsClient});
+    return compacter({produits:SC.produits.map(function(p){ return {id:p.id,nom:p.nom,unite:p.unite,seuil:p.seuil,stockVise:p.cible,prixAchatEuros:(p.prix||0)/100,stockActuel:stockP(p.id),fournisseur:p.fournisseur}; }),fournisseurs:SC.fournisseurs,mouvements:SMV.map(function(m){return {jour:m.jour,type:m.type,lignes:m.lignes,motif:m.motif,note:m.note,fournisseur:m.fournisseur}}),commandes:res[2].docs.map(function(d){var c=d.data();return {jour:c.jour,fournisseur:c.fournisseur,lignes:c.lignes}})});
+  });
+}
+function outilConfig(a){ return db.collection('config').doc(a.nom).get().then(function(s){ return compacter(s.exists?s.data():{}); }); }
+
+/* ---------- propositions (à valider) ---------- */
+var PROPS_ASS={};
+function validerConfig(cible,doc){
+  if(cible==='carte'){ if(!Array.isArray(doc.produits)||!doc.produits.length) return 'la carte doit contenir au moins un produit';
+    var ok=doc.produits.every(function(p){ return p.id&&p.nom&&p.prix&&(p.prix.double!=null||p.prix.simple!=null); }); if(!ok) return 'chaque produit doit avoir un identifiant, un nom et au moins un prix'; }
+  if(cible==='planning'&&!Array.isArray(doc.creneaux)) return 'le planning doit contenir une liste de créneaux';
+  if(cible==='stock'&&(!Array.isArray(doc.produits)||!Array.isArray(doc.fournisseurs))) return 'la configuration du stock doit contenir produits et fournisseurs';
+  return null;
+}
+function carteProposition(id,titre,detail,boutons){
+  var el=document.createElement('div'); el.className='ass-prop'; el.id='prop-'+id;
+  el.innerHTML='<b>'+esc(titre)+'</b><div class="note">'+detail+'</div><div class="inline" id="propb-'+id+'">'+boutons+'</div>';
+  $('assMsgs').appendChild(el); $('assMsgs').scrollTop=1e9;
+}
+function proposerDonnees(a,id){
+  var err=validerConfig(a.cible,a.nouveau||{});
+  if(err) return Promise.resolve('Proposition refusée : '+err+'.');
+  PROPS_ASS[id]={type:'donnees',a:a};
+  carteProposition(id,'Proposition : '+a.resume,'Cible : '+esc(a.cible)+(a.semaine?' · semaine du '+esc(a.semaine):''),'<button class="btn small prim" data-pa="'+id+'">Appliquer</button><button class="btn small sec" data-pr="'+id+'">Refuser</button>');
+  return Promise.resolve('Proposition affichée au propriétaire, en attente de sa validation.');
+}
+function proposerSite(a,id){
+  PROPS_ASS[id]={type:'site',a:a};
+  var det=esc(a.fichier)+' · '+a.modifications.length+' remplacement(s)<details><summary>Voir le détail</summary>'+a.modifications.map(function(m){ return '<pre class="ass-diff"><span class="moins">− '+esc(m.ancien).slice(0,600)+'</span>\n<span class="plus">+ '+esc(m.nouveau).slice(0,600)+'</span></pre>'; }).join('')+'</details>';
+  carteProposition(id,'Modification du site : '+a.resume,det,'<button class="btn small dark" data-pt="'+id+'">Tester la modification</button><button class="btn small sec" data-pr="'+id+'">Refuser</button>');
+  return Promise.resolve('Proposition de modification du site affichée. Le propriétaire va la tester puis décider de la publier.');
+}
+function journalModif(texte){ db.collection('journal_modifs').add({texte:texte,par:'assistant (validé par le propriétaire)',jour:jour(),h:hhmm(Date.now()),tsClient:Date.now()}).catch(function(){}); }
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-pa],[data-pr],[data-pt],[data-pp]'); if(!b) return;
+  var id=b.getAttribute('data-pa')||b.getAttribute('data-pr')||b.getAttribute('data-pt')||b.getAttribute('data-pp'), p=PROPS_ASS[id], zone=$('propb-'+id); if(!p) return;
+  if(b.hasAttribute('data-pr')){ zone.innerHTML='<span class="note">Refusée</span>'; return; }
+  if(b.hasAttribute('data-pa')){
+    var a=p.a, ref=a.cible==='planning'?db.collection('planning').doc(a.semaine):db.collection('config').doc(a.cible);
+    var doc=a.cible==='planning'?{semaine:a.semaine,creneaux:a.nouveau.creneaux,maj:Date.now()}:Object.assign({},a.nouveau,{maj:Date.now()});
+    b.disabled=true;
+    ref.set(doc).then(function(){ zone.innerHTML='<span class="ok">✓ Appliquée</span>'; journalModif(a.resume); toast('Modification appliquée'); }).catch(function(er){ zone.innerHTML='<span class="err">Échec : '+esc(er.code||er.message)+'</span>'; });
+    return;
+  }
+  if(b.hasAttribute('data-pt')){
+    zone.innerHTML='<span class="note">Envoi de la modification…</span>';
+    appelRelais('/site/proposer',p.a).then(function(){
+      zone.innerHTML='<span class="note">Vérification automatique en cours (environ 30 secondes)…</span>';
+      var essais=0;
+      (function attendre(){
+        setTimeout(function(){
+          appelRelais('/site/statut',{}).then(function(st){
+            if(st.statut==='completed' && st.conclusion==='success'){ zone.innerHTML='<span class="ok">✓ Vérification réussie</span> <button class="btn small prim" data-pp="'+id+'">Publier</button>'; return; }
+            if(st.statut==='completed'){ zone.innerHTML='<span class="err">✕ La vérification a échoué : rien n’a été publié.</span>'; return; }
+            if(++essais<40) attendre(); else zone.innerHTML='<span class="err">Vérification trop longue, réessaie plus tard.</span>';
+          }).catch(function(er){ zone.innerHTML='<span class="err">'+esc(er.message)+'</span>'; });
+        },5000);
+      })();
+    }).catch(function(er){ zone.innerHTML='<span class="err">'+esc(er.message)+'</span>'; });
+    return;
+  }
+  if(b.hasAttribute('data-pp')){
+    if(!confirm('Publier cette modification de ton espace ?')) return;
+    zone.innerHTML='<span class="note">Publication…</span>';
+    appelRelais('/site/publier',{}).then(function(r){
+      ASS.derniereVersion=r.versionPrecedente;
+      db.collection('config').doc('assistant').set({relais:ASS.relais,briefing:ASS.briefing,derniereVersion:r.versionPrecedente,maj:Date.now()}).catch(function(){});
+      journalModif('Site : '+p.a.resume);
+      zone.innerHTML='<span class="ok">✓ Publiée. Recharge la page dans 1 à 2 minutes.</span>';
+    }).catch(function(er){ zone.innerHTML='<span class="err">'+esc(er.message)+'</span>'; });
+  }
+});
+
+/* ---------- boucle de discussion ---------- */
+function executerOutil(bloc){
+  var a=bloc.input||{}, id=bloc.id;
+  var f={lire_ventes:outilVentes,lire_controle_caisse:outilControle,lire_equipe:outilEquipe,lire_stock:outilStock,lire_config:outilConfig,
+    proposer_modification_donnees:function(x){return proposerDonnees(x,id)},
+    lire_site:function(x){ return appelRelais('/site/lire',x).then(compacter); },
+    proposer_modification_site:function(x){return proposerSite(x,id)}}[bloc.name];
+  var p=f?f(a):Promise.resolve('Outil inconnu');
+  return p.then(function(res){ return {type:'tool_result',tool_use_id:id,content:String(res)}; },function(er){ return {type:'tool_result',tool_use_id:id,content:'Erreur : '+(er.message||er.code),is_error:true}; });
+}
+function bulle(role,html){ var d=document.createElement('div'); d.className=role==='user'?'ass-me':'ass-ai'; d.innerHTML=html; $('assMsgs').appendChild(d); $('assMsgs').scrollTop=1e9; return d; }
+function mdLeger(t){ return esc(t).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'); }
+function envoyerAss(texte){
+  if(ASS.occupe||!texte.trim()) return;
+  ASS.occupe=true; bulle('user',esc(texte)); $('assIn').value='';
+  ASS.conv.push({role:'user',content:texte});
+  var att=bulle('ai','<span class="note">Je regarde tes données…</span>'), tours=0;
+  var ctx='\n\nNous sommes le '+new Date().toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' ('+jour()+'), il est '+hhmm(Date.now())+'.';
+  function tour(){
+    return appelRelais('/chat',{briefing:ASS.briefing+ctx,messages:ASS.conv,tools:OUTILS}).then(function(rep){
+      ASS.conv.push({role:'assistant',content:rep.content});
+      var textes=rep.content.filter(function(c){return c.type==='text'}).map(function(c){return c.text}).join('\n');
+      if(textes){ att.innerHTML=mdLeger(textes); att=null; }
+      var outils=rep.content.filter(function(c){return c.type==='tool_use'});
+      if(rep.stop_reason==='tool_use' && outils.length && ++tours<10){
+        if(!att) att=bulle('ai','<span class="note">…</span>');
+        return Promise.all(outils.map(executerOutil)).then(function(res){ ASS.conv.push({role:'user',content:res}); return tour(); });
+      }
+      if(att) att.remove();
+    });
+  }
+  tour().catch(function(er){ if(att) att.innerHTML='<span class="err">'+esc(er.message)+'</span>'; else bulle('ai','<span class="err">'+esc(er.message)+'</span>'); })
+    .then(function(){ ASS.occupe=false; sauverConv(); });
+}
+function sauverConv(){
+  // on garde le fil lisible (textes) ; les données brutes des outils ne sont pas conservées
+  var lisible=ASS.conv.filter(function(m){ return typeof m.content==='string' || (Array.isArray(m.content)&&m.content.some(function(c){return c.type==='text'})); })
+    .map(function(m){ return {role:m.role,texte:typeof m.content==='string'?m.content:m.content.filter(function(c){return c.type==='text'}).map(function(c){return c.text}).join('\n')}; });
+  if(!lisible.length) return;
+  var ref=ASS.convId?db.collection('assistant_conv').doc(ASS.convId):db.collection('assistant_conv').doc();
+  ASS.convId=ref.id;
+  ref.set({messages:lisible,jour:jour(),maj:Date.now()}).catch(function(){});
+}
+function ouvrirAss(){
+  $('assPanel').className='ass-panel on';
+  if(!$('assMsgs').children.length) bulle('ai','Bonjour ! Pose-moi une question sur ton commerce : je lis tes vraies données. Je peux aussi te proposer des modifications (prix, planning, réglages, ou une nouvelle vue dans ton espace), que tu valides d’un clic.');
+  setTimeout(function(){ $('assIn').focus(); },50);
+}
+function nouvelleConv(){ ASS.conv=[]; ASS.convId=null; $('assMsgs').innerHTML=''; ouvrirAss(); }
+document.addEventListener('click',function(e){
+  var b=e.target.closest('#assFab,#assFermer,#assEnvoyer,#assNouveau,[data-sug]'); if(!b) return;
+  if(b.id==='assFab') ouvrirAss();
+  if(b.id==='assFermer') $('assPanel').className='ass-panel';
+  if(b.id==='assNouveau') nouvelleConv();
+  if(b.id==='assEnvoyer') envoyerAss($('assIn').value);
+  if(b.hasAttribute('data-sug')) envoyerAss(b.getAttribute('data-sug'));
+});
+document.addEventListener('keydown',function(e){ if(e.target&&e.target.id==='assIn'&&e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); envoyerAss(e.target.value); } });
+
 /* ---------- CARTE ---------- */
 var CARTE_DEFAUT={
   formules:[{id:'menu_double_hamburger',nom:'Menu Double Hamburger',sous:'Frites + boisson comprises',produit:'hamburger',taille:'double',prix:550,actif:true}],
@@ -1066,7 +1320,18 @@ $('suSave').onclick=function(){
   db.collection('config').doc('sumup').set(c).then(function(){ toast('Identifiants SumUp envoyés à la caisse'); $('suEtat').textContent='Enregistrés à l’instant'; })
     .catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
 };
+function remplirAssistant(){ chargerAssistant().then(function(){ $('assRelais').value=ASS.relais||''; $('assBriefing').value=ASS.briefing||BRIEFING_DEFAUT; $('assEtat').textContent=ASS.derniereVersion?'Une publication de l’assistant peut être annulée.':''; }); }
+$('assSave').onclick=function(){
+  ASS.relais=$('assRelais').value.trim(); ASS.briefing=$('assBriefing').value.trim()||BRIEFING_DEFAUT;
+  db.collection('config').doc('assistant').set({relais:ASS.relais,briefing:ASS.briefing,derniereVersion:ASS.derniereVersion||null,maj:Date.now()}).then(function(){ toast('Assistant enregistré'); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
+};
+$('assAnnulerPub').onclick=function(){
+  if(!ASS.derniereVersion){ alert('Aucune publication de l’assistant à annuler.'); return; }
+  if(!confirm('Revenir à la version de ton espace d’avant la dernière modification de l’assistant ?')) return;
+  appelRelais('/site/annuler',{version:ASS.derniereVersion}).then(function(r){ ASS.derniereVersion=null; db.collection('config').doc('assistant').set({relais:ASS.relais,briefing:ASS.briefing,derniereVersion:null,maj:Date.now()}).catch(function(){}); toast('Version précédente restaurée'); $('assEtat').textContent=r.restaures&&r.restaures.length?'Restauré : '+r.restaures.join(', ')+'. Recharge la page dans 1 à 2 minutes.':'Rien à restaurer.'; }).catch(function(e){ alert(e.message); });
+};
 function chargerReglages(){
+  remplirAssistant();
   chargerSumup();
   db.collection('config').doc('caisse').get().then(function(s){
     reg=s.exists?s.data():{};
