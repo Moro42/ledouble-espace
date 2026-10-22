@@ -148,6 +148,10 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 .nav-perso.on{background:var(--ok);color:#fff;border-color:var(--ok)}
 #pages{display:block}
 .mp-bandeau{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;background:#FBF6EE;border:1.5px solid var(--accent);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:14px}
+.mp-periode{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}
+.mp-periode .bascule{flex-wrap:wrap}
+.mp-dates{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mp-dates .in{width:auto}
 .mp-grille{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:start}
 .bloc{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;min-width:0}
 .bloc.t13{grid-column:span 2}.bloc.t12{grid-column:span 3}.bloc.t23{grid-column:span 4}.bloc.t11{grid-column:span 6}
@@ -1718,6 +1722,22 @@ function periodeDe(p){
   else { pau=new Date(du); pau.setDate(pau.getDate()-1); pdu=new Date(pau); pdu.setDate(pdu.getDate()-(n-1)); }
   return {du:jour(du),au:jour(au),pdu:jour(pdu),pau:jour(pau),n:n,lib:lib,comp:p==='jour'?'vs même jour la semaine dernière, à la même heure':p==='hier'?'vs même jour la semaine dernière':'vs période précédente'};
 }
+function periodeDates(du,au){
+  var a=new Date(du+'T12:00:00'), b=new Date(au+'T12:00:00'); if(b<a){ var t=a; a=b; b=t; }
+  var n=Math.round((b-a)/864e5)+1, pau=new Date(a); pau.setDate(pau.getDate()-1); var pdu=new Date(pau); pdu.setDate(pdu.getDate()-(n-1));
+  function jm(d){ return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
+  return {du:jour(a),au:jour(b),pdu:jour(pdu),pau:jour(pau),n:n,lib:n===1?'Le '+jm(a):'Du '+jm(a)+' au '+jm(b),comp:'vs période précédente'};
+}
+/* période choisie en haut de la page (elle remplace celle des blocs, sans modifier la mise en page) */
+var PER_PAGE={};
+try{ PER_PAGE=JSON.parse(localStorage.getItem('ld-periodes')||'{}')||{}; }catch(e){ PER_PAGE={}; }
+function periodeBloc(b,inf){
+  var o=PER_PAGE[MP.courante];
+  if(o&&o.du&&o.au) return periodeDates(o.du,o.au);
+  var per=(o&&o.per)||b.periode||'jour';
+  if(inf.sansJour&&(per==='jour'||per==='hier')) per='7';
+  var P=periodeDe(per); P.per=per; return P;
+}
 var CACHE_EV={};
 function evsPeriode(du,au){
   var k=du+'|'+au, c=CACHE_EV[k], aujourdhui=jour();
@@ -1752,8 +1772,7 @@ function rendreBloc(b,el){
     return;
   }
   if(b.type==='caisse'||b.type==='journal'||b.type==='notes'||b.type==='alertes'){ corps.setAttribute('data-copie',{caisse:'dCloture',journal:'dJournal',notes:'dNotes',alertes:'dAlertes'}[b.type]); synchroCopies(); return; }
-  var per=b.periode||'jour'; if(inf.sansJour&&(per==='jour'||per==='hier')) per='7';
-  var P=periodeDe(per);
+  var P=periodeBloc(b,inf), per=P.per||'dates';
   el.querySelector('.bl-per').textContent=P.lib;
   if(b.type==='points'){ chargerAudit({du:P.du,au:P.au,pdu:P.pdu,pau:P.pau,n:P.n,lib:P.lib},corps); return; }
   var besoinPrec=b.type==='chiffre';
@@ -1763,8 +1782,8 @@ function rendreBloc(b,el){
     var R=analyser(evs), Rp=prec?analyser(prec):null;
     if(b.type==='chiffre'){
       var m=b.mesure||'ca', v=valeurMesure(R,m), vp=Rp?valeurMesure(Rp,m):null, inverse=(m==='annulations'||m==='sorties');
-      var d=vp==null?'':(m==='menus'?delta(v,vp,'pts',inverse):m==='ticket'?delta(v,vp,'eur',inverse):delta(v,vp,null,inverse));
-      corps.innerHTML='<b class="bl-valeur num">'+fmtMesure(m,v)+'</b><small class="bl-comp">'+(d?d.replace('vs période préc.',P.comp):'&nbsp;')+'</small>';
+      var d=vp==null?'':(!Rp.nb&&!Rp.ann&&!Rp.sorties)?'<i>pas de données sur la période précédente</i>':(m==='menus'?delta(v,vp,'pts',inverse):m==='ticket'?delta(v,vp,'eur',inverse):delta(v,vp,null,inverse));
+      corps.innerHTML='<b class="bl-valeur num">'+fmtMesure(m,v)+'</b><small class="bl-comp">'+(d?d.replace('vs période préc.',P.comp).replace('= période préc.','= '+P.comp.replace('vs ','')):'&nbsp;')+'</small>';
       return;
     }
     if(b.type==='heures'){
@@ -1849,6 +1868,13 @@ function afficherPage(id){
   construireNav();
   var h='';
   if(MP.edition) h+='<div class="mp-bandeau"><span><b>Mode personnalisation</b> · glisse les blocs (⠿) ou utilise ▲ ▼, règle-les avec ⚙, retire-les avec ✕. Les pages se réorganisent aussi en les glissant.</span><span class="inline"><button class="btn small sec" id="mpDefaut">Mise en page par défaut</button><button class="btn small sec" id="mpAnnuler">Annuler</button><button class="btn small prim" id="mpEnreg">Enregistrer</button></span></div>';
+  var avecPeriode=p.blocs.some(function(b){ var inf=infoType(b.type); return inf&&inf.periode; });
+  if(avecPeriode && !MP.edition){
+    var o=PER_PAGE[p.id]||{}, choix=o.du?'dates':(o.per||'');
+    var opts=[['','Selon chaque bloc'],['jour','Aujourd’hui'],['hier','Hier'],['7','7 jours'],['30','30 jours'],['mois','Mois'],['dates','Dates…']];
+    h+='<div class="mp-periode"><span class="note">Période</span><div class="bascule">'+opts.map(function(x){ return '<button data-perp="'+x[0]+'" aria-pressed="'+(choix===x[0])+'">'+x[1]+'</button>'; }).join('')+'</div>'+
+      '<span class="mp-dates'+(choix==='dates'?'':' hidden')+'"><input class="in" type="date" id="mpDu" value="'+(o.du||jour(new Date(Date.now()-6*864e5)))+'"> <span class="note">au</span> <input class="in" type="date" id="mpAu" value="'+(o.au||jour())+'"> <button class="btn small dark" id="mpDatesOk">Afficher</button></span></div>';
+  }
   h+='<div class="mp-grille'+(MP.edition?' edition':'')+'" id="mpGrille">'+p.blocs.map(function(b){
     var outil=!!OUTILS_SECTION[b.type];
     return '<div class="bloc '+TAILLES[b.taille||'1']+(outil?' outil':'')+'" data-id="'+b.id+'" '+(MP.edition?'draggable="true"':'')+'>'+
@@ -1902,9 +1928,21 @@ function reglerBloc(id){
 }
 function ouvrirFenetreMP(h){ $('mpFenetre').innerHTML='<div class="card mp-fen">'+h+'</div>'; $('mpFenetre').className='mp-modal on'; }
 function fermerFenetreMP(){ $('mpFenetre').className='mp-modal'; $('mpFenetre').innerHTML=''; }
+function choisirPeriodePage(val){
+  if(!val) delete PER_PAGE[MP.courante]; else PER_PAGE[MP.courante]=val;
+  try{ localStorage.setItem('ld-periodes',JSON.stringify(PER_PAGE)); }catch(e){}
+  afficherPage(MP.courante);
+}
 document.addEventListener('click',function(e){
   var t=e.target;
   if(t.id==='mpFenetre'){ fermerFenetreMP(); return; }
+  var pp=t.closest('[data-perp]');
+  if(pp){ var v=pp.getAttribute('data-perp');
+    if(v==='dates'){ Array.prototype.forEach.call(document.querySelectorAll('[data-perp]'),function(x){ x.setAttribute('aria-pressed',String(x===pp)); }); document.querySelector('.mp-dates').classList.remove('hidden'); return; }
+    choisirPeriodePage(v?{per:v}:null); return; }
+  if(t.id==='mpDatesOk'){ var du=$('mpDu').value, au=$('mpAu').value; if(!du||!au){ toast('Choisis les deux dates'); return; }
+    var nj=Math.round((new Date(au)-new Date(du))/864e5)+1; if(nj>366||nj<-366){ toast('Un an maximum'); return; }
+    choisirPeriodePage({du:du,au:au}); return; }
   var b=t.closest('[data-page],#mpPerso,#mpAjoutPage,#mpAjoutBloc,#mpEnreg,#mpAnnuler,#mpDefaut,[data-bh],[data-bb],[data-br],[data-bx],[data-ajout],[data-rgok],[data-mpfermer],[data-renp],[data-supp]');
   if(!b) return;
   if(b.hasAttribute('data-renp')){ e.stopPropagation(); var p0=MP.pages.filter(function(p){return p.id===b.getAttribute('data-renp')})[0]; var n=prompt('Nouveau nom de la page',p0.nom); if(n&&n.trim()){ p0.nom=n.trim().slice(0,30); construireNav(); } return; }
