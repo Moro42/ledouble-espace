@@ -1783,7 +1783,7 @@ function rendreBloc(b,el){
     if(b.type==='chiffre'){
       var m=b.mesure||'ca', v=valeurMesure(R,m), vp=Rp?valeurMesure(Rp,m):null, inverse=(m==='annulations'||m==='sorties');
       var d=vp==null?'':(!Rp.nb&&!Rp.ann&&!Rp.sorties)?'<i>pas de données sur la période précédente</i>':(m==='menus'?delta(v,vp,'pts',inverse):m==='ticket'?delta(v,vp,'eur',inverse):delta(v,vp,null,inverse));
-      corps.innerHTML='<b class="bl-valeur num">'+fmtMesure(m,v)+'</b><small class="bl-comp">'+(d?d.replace('vs période préc.',P.comp).replace('= période préc.','= '+P.comp.replace('vs ','')):'&nbsp;')+'</small>';
+      corps.innerHTML='<b class="bl-valeur num">'+fmtMesure(m,v)+'</b><small class="bl-comp">'+(d?d.replace('vs période préc.',P.comp).replace('= période préc.','= '+P.comp.replace('vs ','')):'&nbsp;')+'</small>'+(m==='ca'?'<div class="bl-det" style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px;display:grid;gap:4px;font-size:14px"><div style="display:flex;justify-content:space-between"><span>💳 Carte</span><b class="num">'+eur(R.carte)+'</b></div><div style="display:flex;justify-content:space-between"><span>💶 Espèces</span><b class="num">'+eur(R.cash)+'</b></div><div style="display:flex;justify-content:space-between;border-top:1px dashed var(--line);padding-top:4px"><span><b>Somme</b></span><b class="num">'+eur(R.carte+R.cash)+'</b></div></div>':'');
       return;
     }
     if(b.type==='heures'){
