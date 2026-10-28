@@ -418,6 +418,7 @@ var PROPRIO='h.amrani0001@gmail.com';
 // session propre à cet espace : le propriétaire et le gérant ne se déconnectent plus l'un l'autre
 var appFb=firebase.initializeApp(firebaseConfig,'proprietaire');
 var auth=appFb.auth(), db=appFb.firestore();
+try{ db.enablePersistence({synchronizeTabs:true}).catch(function(){}); }catch(e){}
 
 /* ---------- outils ---------- */
 function $(id){return document.getElementById(id)}
@@ -534,6 +535,7 @@ function demarrer(){
   setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); } },60000);
   db.collection('etat').doc('caisse').onSnapshot(function(s){ etatCaisse=s.exists?s.data():null; majEtatCaisse(); },function(){});
   setInterval(majEtatCaisse,30000);
+  demarrerBase();
   demarrerModulable();
 }
 var etatCaisse=null;
@@ -576,7 +578,7 @@ function rendreDirect(evs,nouveaux){
   function hq(q){ return Math.floor(q/4)+':'+String((q%4)*15).padStart(2,'0'); }
   $('dPic').innerHTML=hv?'Heure la plus chargée : <b>'+hp+'h–'+(hp+1)+'h, '+hv+' client'+(hv>1?'s':'')+'</b> · pic sur 15 min : <b>'+qv+' client'+(qv>1?'s':'')+'</b> ('+hq(qp)+'–'+hq(qp+1)+')':'';
   dernierEvs=evs;
-  try{ clearTimeout(window._mpT); window._mpT=setTimeout(function(){ rafraichirBlocsDuJour(); },400); }catch(e){}
+  try{ clearTimeout(window._mpT); window._mpT=setTimeout(function(){ if(BASE.pret&&!BASE.erreur) synchroCopies(); else rafraichirBlocsDuJour(); },150); }catch(e){}
   function m(t,n,d){return '<div style="margin-bottom:14px"><div class="row" style="border:0;padding:0"><span class="l">'+t+'</span><b class="num">'+pct(n,d)+'</b></div><div class="meter"><i style="width:'+(d?Math.round(n*100/d):0)+'%"></i></div></div>'}
   $('dUpsell').innerHTML=m('Sandwichs avec frites',r.avecFrites,r.lignesSand)+m('Sandwichs avec boisson',r.avecBoisson,r.lignesSand)+
     '<div class="row"><span class="l">Extras vendus</span><b class="num">'+r.extras+'</b></div>';
@@ -650,18 +652,26 @@ function intervallesListe(pts,finJournee){
   if(debut!=null && !finJournee) res.push([debut,Date.now()]);
   return res;
 }
+var AUD_CACHE={};
 function chargerAudit(P0,cible){
   var P=(P0&&P0.du)?P0:audPeriode();
   if(P.n>93){ toast('93 jours maximum'); return; }
+  var cleA=P.pdu+'|'+P.au, ca=AUD_CACHE[cleA];
+  if(ca && Date.now()-ca.t<120000){ if(cible) cible.innerHTML='<div class="empty">Analyse en cours…</div>'; else { $('auTitre').textContent='Audit · '+P.lib; } ca.p.then(function(res){ traiterAudit(P,res,cible); }); return; }
   if(cible) cible.innerHTML='<div class="empty">Analyse en cours…</div>';
   else { $('auTitre').textContent='Audit · '+P.lib; $('auCorps').innerHTML='<div class="empty">Analyse en cours…</div>'; }
-  Promise.all([
-    db.collection('evenements').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
+  var prom=Promise.all([
+    evsPeriode(P.pdu,P.au).then(function(evs){ return {docs:evs.map(function(x){ return {data:function(){ return x; }}; })}; }),
     db.collection('clotures').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
     db.collection('pointages').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
     db.collection('stock_mvts').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
     db.collection('config').doc('equipe').get(), db.collection('config').doc('equipe_prive').get(), db.collection('config').doc('stock').get()
-  ]).then(function(res){
+  ]);
+  AUD_CACHE[cleA]={t:Date.now(),p:prom};
+  prom.then(function(res){ traiterAudit(P,res,cible); }).catch(function(e){ delete AUD_CACHE[cleA]; (cible||$('auCorps')).innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+}
+function traiterAudit(P,res,cible){
+  {
     var evs=res[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
     var cur=evs.filter(function(x){return x.jour>=P.du}), prev=evs.filter(function(x){return x.jour<=P.pau});
     var R=analyser(cur), Rp=analyser(prev);
@@ -672,7 +682,7 @@ function chargerAudit(P0,cible){
     var prixP={}; (st.produits||[]).forEach(function(p){ prixP[p.id]=p; });
     var noms={}; membres.forEach(function(m){ noms[m.id]=m.nom; });
     rendreAudit(P,R,Rp,cur,prev,clos,pts,mvts,membres,pv,prixP,noms,cible);
-  }).catch(function(e){ (cible||$('auCorps')).innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
+  }
 }
 function rendreAudit(P,R,Rp,cur,prev,clos,pts,mvts,membres,pv,prixP,noms,cible){
   var J=['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
@@ -1738,14 +1748,40 @@ function periodeBloc(b,inf){
   if(inf.sansJour&&(per==='jour'||per==='hier')) per='7';
   var P=periodeDe(per); P.per=per; return P;
 }
-var CACHE_EV={};
+var BASE={docs:{},evs:[],pret:false,version:0,depuis:null,attente:[]};
+function demarrerBase(){
+  BASE.depuis=jour(new Date(Date.now()-70*864e5));
+  db.collection('evenements').where('jour','>=',BASE.depuis).onSnapshot(function(s){
+    var ch=s.docChanges?s.docChanges():[];
+    if(!BASE.pret || !ch.length){ BASE.docs={}; s.docs.forEach(function(d){ BASE.docs[d.id]=d.data(); }); }
+    else ch.forEach(function(c){ if(c.type==='removed') delete BASE.docs[c.doc.id]; else BASE.docs[c.doc.id]=c.doc.data(); });
+    BASE.evs=Object.keys(BASE.docs).map(function(k){ return BASE.docs[k]; }).filter(function(x){ return x.type!=='test'; });
+    BASE.version++; MEMO_AN={}; var premier=!BASE.pret; BASE.pret=true;
+    BASE.attente.splice(0).forEach(function(f){ f(); });
+    if(!premier){ clearTimeout(BASE.t); BASE.t=setTimeout(function(){ rafraichirPageVisible(); },250); }
+  },function(e){ BASE.erreur=e; BASE.attente.splice(0).forEach(function(f){ f(); }); });
+}
+function basePrete(){ return BASE.pret?Promise.resolve():new Promise(function(ok){ BASE.attente.push(ok); }); }
+var MEMO_AN={};
+function analyserPeriode(du,au,evs){ var k=du+'|'+au+'|'+BASE.version; if(!MEMO_AN[k]) MEMO_AN[k]=analyser(evs); return MEMO_AN[k]; }
+function rafraichirPageVisible(){
+  if(MP.edition||!MP.courante) return;
+  var p=pageCourante(); if(!p) return;
+  p.blocs.forEach(function(b){ if(OUTILS_SECTION[b.type]||b.type==='points'||['caisse','journal','notes','alertes'].indexOf(b.type)>=0) return; var el=document.querySelector('.bloc[data-id="'+b.id+'"]'); if(el) rendreBloc(b,el); });
+  synchroCopies();
+}
+var CACHE_EV={}, EN_COURS={};
+function filtrerBase(du,au){ return BASE.evs.filter(function(x){ return x.jour>=du && x.jour<=au; }); }
 function evsPeriode(du,au){
-  var k=du+'|'+au, c=CACHE_EV[k], aujourdhui=jour();
-  if(au===aujourdhui && du===aujourdhui && typeof dernierEvs!=='undefined' && dernierEvs && jourSuivi===aujourdhui) return Promise.resolve(dernierEvs);
-  if(c && Date.now()-c.t<(au>=aujourdhui?90000:600000)) return Promise.resolve(c.evs);
-  return db.collection('evenements').where('jour','>=',du).where('jour','<=',au).get().then(function(s){
-    var evs=s.docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}); CACHE_EV[k]={t:Date.now(),evs:evs}; return evs;
-  });
+  // tout ce qui tient dans les 70 derniers jours vient de la mémoire : aucune attente réseau
+  if(BASE.depuis && du>=BASE.depuis && !BASE.erreur){ return BASE.pret?Promise.resolve(filtrerBase(du,au)):basePrete().then(function(){ return filtrerBase(du,au); }); }
+  var k=du+'|'+au, c=CACHE_EV[k];
+  if(c && Date.now()-c.t<600000) return Promise.resolve(c.evs);
+  if(EN_COURS[k]) return EN_COURS[k];
+  EN_COURS[k]=db.collection('evenements').where('jour','>=',du).where('jour','<=',au).get().then(function(s){
+    var evs=s.docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}); CACHE_EV[k]={t:Date.now(),evs:evs}; delete EN_COURS[k]; return evs;
+  },function(e){ delete EN_COURS[k]; throw e; });
+  return EN_COURS[k];
 }
 
 /* ---------- rendu des blocs ---------- */
@@ -1776,10 +1812,12 @@ function rendreBloc(b,el){
   el.querySelector('.bl-per').textContent=P.lib;
   if(b.type==='points'){ chargerAudit({du:P.du,au:P.au,pdu:P.pdu,pau:P.pau,n:P.n,lib:P.lib},corps); return; }
   var besoinPrec=b.type==='chiffre';
-  Promise.all([evsPeriode(P.du,P.au),besoinPrec?evsPeriode(P.pdu,P.pau):Promise.resolve(null)]).then(function(res){
+  var direct=BASE.pret && !BASE.erreur && P.du>=BASE.depuis && (!besoinPrec||P.pdu>=BASE.depuis);
+  var source=direct?{then:function(f){ try{ f([filtrerBase(P.du,P.au),besoinPrec?filtrerBase(P.pdu,P.pau):null]); }catch(e){ corps.innerHTML='<div class="err">'+esc(e.message)+'</div>'; } return {catch:function(){}}; }}:Promise.all([evsPeriode(P.du,P.au),besoinPrec?evsPeriode(P.pdu,P.pau):Promise.resolve(null)]);
+  source.then(function(res){
     var evs=res[0], prec=res[1];
     if(prec && per==='jour'){ var mnt=new Date(), lim=mnt.getHours()*60+mnt.getMinutes(); prec=prec.filter(function(x){ var d=new Date(x.tsClient); return d.getHours()*60+d.getMinutes()<=lim; }); }
-    var R=analyser(evs), Rp=prec?analyser(prec):null;
+    var R=analyserPeriode(P.du,P.au,evs), Rp=prec?(per==='jour'?analyser(prec):analyserPeriode(P.pdu,P.pau,prec)):null;
     if(b.type==='chiffre'){
       var m=b.mesure||'ca', v=valeurMesure(R,m), vp=Rp?valeurMesure(Rp,m):null, inverse=(m==='annulations'||m==='sorties');
       var d=vp==null?'':(!Rp.nb&&!Rp.ann&&!Rp.sorties)?'<i>pas de données sur la période précédente</i>':(m==='menus'?delta(v,vp,'pts',inverse):m==='ticket'?delta(v,vp,'eur',inverse):delta(v,vp,null,inverse));
