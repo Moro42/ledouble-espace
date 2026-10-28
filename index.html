@@ -536,6 +536,7 @@ function demarrer(){
   db.collection('etat').doc('caisse').onSnapshot(function(s){ etatCaisse=s.exists?s.data():null; majEtatCaisse(); },function(){});
   setInterval(majEtatCaisse,30000);
   demarrerBase();
+  demarrerBaseAudit();
   demarrerModulable();
 }
 var etatCaisse=null;
@@ -656,9 +657,10 @@ var AUD_CACHE={};
 function chargerAudit(P0,cible){
   var P=(P0&&P0.du)?P0:audPeriode();
   if(P.n>93){ toast('93 jours maximum'); return; }
+  var mem=auditDepuisMemoire(P); if(mem){ traiterAudit(P,mem,cible); if(!cible) $('auTitre').textContent='Audit · '+P.lib; return; }
   var cleA=P.pdu+'|'+P.au, ca=AUD_CACHE[cleA];
   if(ca && Date.now()-ca.t<120000){ if(cible) cible.innerHTML='<div class="empty">Analyse en cours…</div>'; else { $('auTitre').textContent='Audit · '+P.lib; } ca.p.then(function(res){ traiterAudit(P,res,cible); }); return; }
-  if(cible) cible.innerHTML='<div class="empty">Analyse en cours…</div>';
+  if(cible){ if(!cible.querySelector('.au-pt')&&!cible.querySelector('.empty')) cible.innerHTML='<div class="empty">Analyse en cours…</div>'; }
   else { $('auTitre').textContent='Audit · '+P.lib; $('auCorps').innerHTML='<div class="empty">Analyse en cours…</div>'; }
   var prom=Promise.all([
     evsPeriode(P.pdu,P.au).then(function(evs){ return {docs:evs.map(function(x){ return {data:function(){ return x; }}; })}; }),
@@ -674,7 +676,7 @@ function traiterAudit(P,res,cible){
   {
     var evs=res[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
     var cur=evs.filter(function(x){return x.jour>=P.du}), prev=evs.filter(function(x){return x.jour<=P.pau});
-    var R=analyser(cur), Rp=analyser(prev);
+    var R=analyserPeriode(P.du,P.au,cur), Rp=analyserPeriode(P.pdu,P.pau,prev);
     var clos=res[1].docs.map(function(d){return d.data()});
     var pts=res[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o});
     var mvts=res[3].docs.map(function(d){return d.data()});
@@ -1761,14 +1763,37 @@ function demarrerBase(){
     if(!premier){ clearTimeout(BASE.t); BASE.t=setTimeout(function(){ rafraichirPageVisible(); },250); }
   },function(e){ BASE.erreur=e; BASE.attente.splice(0).forEach(function(f){ f(); }); });
 }
+var BASEA={clos:[],pts:[],mvts:[],cfg:{},nb:0,pret:false,version:0};
+function demarrerBaseAudit(){
+  var depuis=BASE.depuis, attendus=6;
+  function pret(){ if(!BASEA.pret && ++BASEA.nb>=attendus){ BASEA.pret=true; } BASEA.version++; AUD_CACHE={}; if(BASEA.pret){ clearTimeout(BASEA.t); BASEA.t=setTimeout(function(){ rafraichirPageVisible(); },300); } }
+  function liste(col,cle,avecId){ var vu=false; db.collection(col).where('jour','>=',depuis).onSnapshot(function(s){ BASEA[cle]=s.docs.map(function(d){ var o=d.data(); if(avecId) o.__id=d.id; return o; }); if(!vu){ vu=true; BASEA.nb++; if(BASEA.nb>=attendus) BASEA.pret=true; } BASEA.version++; AUD_CACHE={}; if(BASEA.pret){ clearTimeout(BASEA.t); BASEA.t=setTimeout(function(){ rafraichirPageVisible(); },300); } },function(){ if(!vu){ vu=true; BASEA.nb++; } }); }
+  function doc(nom){ var vu=false; db.collection('config').doc(nom).onSnapshot(function(s){ BASEA.cfg[nom]=s.exists?s.data():null; if(!vu){ vu=true; BASEA.nb++; if(BASEA.nb>=attendus) BASEA.pret=true; } BASEA.version++; AUD_CACHE={}; },function(){ if(!vu){ vu=true; BASEA.nb++; } }); }
+  liste('clotures','clos',false); liste('pointages','pts',true); liste('stock_mvts','mvts',false);
+  doc('equipe'); doc('equipe_prive'); doc('stock');
+}
+function auditDepuisMemoire(P){
+  if(!BASE.pret||!BASEA.pret||BASE.erreur||P.pdu<BASE.depuis) return null;
+  function enDocs(arr,avecId){ return {docs:arr.map(function(o){ return {id:o.__id,data:function(){ var c={}; for(var k in o) if(k!=='__id') c[k]=o[k]; return c; }}; })}; }
+  function dans(x){ return x.jour>=P.pdu && x.jour<=P.au; }
+  function snapCfg(n){ var d=BASEA.cfg[n]; return {exists:!!d,data:function(){ return d; }}; }
+  return [enDocs(filtrerBase(P.pdu,P.au)),enDocs(BASEA.clos.filter(dans)),enDocs(BASEA.pts.filter(dans),true),enDocs(BASEA.mvts.filter(dans)),snapCfg('equipe'),snapCfg('equipe_prive'),snapCfg('stock')];
+}
 function basePrete(){ return BASE.pret?Promise.resolve():new Promise(function(ok){ BASE.attente.push(ok); }); }
 var MEMO_AN={};
 function analyserPeriode(du,au,evs){ var k=du+'|'+au+'|'+BASE.version; if(!MEMO_AN[k]) MEMO_AN[k]=analyser(evs); return MEMO_AN[k]; }
 function rafraichirPageVisible(){
   if(MP.edition||!MP.courante) return;
   var p=pageCourante(); if(!p) return;
-  p.blocs.forEach(function(b){ if(OUTILS_SECTION[b.type]||b.type==='points'||['caisse','journal','notes','alertes'].indexOf(b.type)>=0) return; var el=document.querySelector('.bloc[data-id="'+b.id+'"]'); if(el) rendreBloc(b,el); });
+  rendreBlocsProgressif(p.blocs.filter(function(b){ return !OUTILS_SECTION[b.type] && ['caisse','journal','notes','alertes'].indexOf(b.type)<0; }));
   synchroCopies();
+}
+var LOURDS={points:1,affluence:1,jours:1,heures:1};
+function rendreBlocsProgressif(blocs){
+  var jeton=(window._rendu=(window._rendu||0)+1);
+  var legers=blocs.filter(function(b){ return !LOURDS[b.type]; }), lourds=blocs.filter(function(b){ return LOURDS[b.type]; });
+  legers.forEach(function(b){ var el=document.querySelector('.bloc[data-id="'+b.id+'"]'); if(el) rendreBloc(b,el); });
+  (function suivant(){ if(!lourds.length||jeton!==window._rendu) return; var b=lourds.shift(), el=document.querySelector('.bloc[data-id="'+b.id+'"]'); if(el) rendreBloc(b,el); setTimeout(suivant,0); })();
 }
 var CACHE_EV={}, EN_COURS={};
 function filtrerBase(du,au){ return BASE.evs.filter(function(x){ return x.jour>=du && x.jour<=au; }); }
@@ -1922,7 +1947,7 @@ function afficherPage(id){
   }).join('')+(MP.edition?'<button class="bloc t13 bl-ajout" id="mpAjoutBloc"><span>+</span>Ajouter un bloc</button>':'')+'</div>';
   if(!p.blocs.length && !MP.edition) h+='<div class="card"><div class="empty">Cette page est vide. Clique sur « ✎ Personnaliser » pour y ajouter des blocs.</div></div>';
   $('pages').innerHTML=h;
-  p.blocs.forEach(function(b){ if(MP.edition && OUTILS_SECTION[b.type]) return; var el=document.querySelector('.bloc[data-id="'+b.id+'"]'); if(el) rendreBloc(b,el); });
+  rendreBlocsProgressif(p.blocs.filter(function(b){ return !(MP.edition && OUTILS_SECTION[b.type]); }));
   window.scrollTo(0,0);
 }
 function blocParId(id){ var p=pageCourante(); for(var i=0;i<p.blocs.length;i++) if(p.blocs[i].id===id) return {p:p,i:i,b:p.blocs[i]}; return null; }
@@ -1969,7 +1994,10 @@ function fermerFenetreMP(){ $('mpFenetre').className='mp-modal'; $('mpFenetre').
 function choisirPeriodePage(val){
   if(!val) delete PER_PAGE[MP.courante]; else PER_PAGE[MP.courante]=val;
   try{ localStorage.setItem('ld-periodes',JSON.stringify(PER_PAGE)); }catch(e){}
-  afficherPage(MP.courante);
+  var o=PER_PAGE[MP.courante]||{}, choix=o.du?'dates':(o.per||'');
+  Array.prototype.forEach.call(document.querySelectorAll('[data-perp]'),function(x){ x.setAttribute('aria-pressed',String(x.getAttribute('data-perp')===choix)); });
+  var zd=document.querySelector('.mp-dates'); if(zd) zd.classList.toggle('hidden',choix!=='dates');
+  rafraichirPageVisible();
 }
 document.addEventListener('click',function(e){
   var t=e.target;
