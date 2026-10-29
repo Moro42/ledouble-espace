@@ -118,7 +118,6 @@ var GERANT='mattheo@double.com';
 // session propre à cet espace : le propriétaire et le gérant ne se déconnectent plus l'un l'autre
 var appFb=firebase.initializeApp(firebaseConfig,'gerant');
 var auth=appFb.auth(), db=appFb.firestore();
-try{ db.enablePersistence({synchronizeTabs:true}).catch(function(){}); }catch(e){}
 
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

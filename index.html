@@ -418,7 +418,6 @@ var PROPRIO='h.amrani0001@gmail.com';
 // session propre à cet espace : le propriétaire et le gérant ne se déconnectent plus l'un l'autre
 var appFb=firebase.initializeApp(firebaseConfig,'proprietaire');
 var auth=appFb.auth(), db=appFb.firestore();
-try{ db.enablePersistence({synchronizeTabs:true}).catch(function(){}); }catch(e){}
 
 /* ---------- outils ---------- */
 function $(id){return document.getElementById(id)}
@@ -535,9 +534,6 @@ function demarrer(){
   setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); } },60000);
   db.collection('etat').doc('caisse').onSnapshot(function(s){ etatCaisse=s.exists?s.data():null; majEtatCaisse(); },function(){});
   setInterval(majEtatCaisse,30000);
-  demarrerBase();
-  demarrerBaseAudit();
-  demarrerModulable();
 }
 var etatCaisse=null;
 function majEtatCaisse(){
@@ -1251,8 +1247,8 @@ var OUTILS=[
  {name:'lire_controle_caisse',description:'Ouvertures, clôtures à l’aveugle, attendu, compté et écarts de caisse jour par jour sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_equipe',description:'Membres de l’équipe, planning et heures prestées (pointages), retards, sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_stock',description:'Produits suivis, stock actuel, livraisons, inventaires et pertes des 60 derniers jours, commandes récentes.',input_schema:{type:'object',properties:{}}},
- {name:'lire_config',description:'Lit une configuration : carte (produits et prix), caisse (réglages, motifs de sortie, seuils), stock (produits et fournisseurs).',input_schema:{type:'object',properties:{nom:{type:'string',enum:['carte','caisse','stock','espace_layout']}},required:['nom']}},
- {name:'proposer_modification_donnees',description:'Propose de remplacer une configuration (carte, caisse ou stock) par une nouvelle version complète, de remplacer le planning d’une semaine, ou de modifier la mise en page de l’espace propriétaire (cible mise_en_page : {pages:[{id,nom,blocs:[{id,type,taille,mesure,periode,liste,titre}]}]} ; lis d’abord espace_layout ; types : chiffre, heures, jours, affluence, classement, additionnelles, boissons, paiements, points, caisse, alertes, notes, journal, outil-direct, outil-historique, outil-audit, outil-equipe, outil-stock, outil-factures, outil-carte, outil-reglages, outil-maj ; tailles 1/3, 1/2, 2/3, 1 ; périodes jour, hier, 7, 30, mois ; mesures ca, clients, ticket, boissons, menus, annulations, sorties, especes, carte, mixtes). Le propriétaire valide d’un clic. Lis toujours la configuration actuelle avant, et ne change que ce qui est demandé.',input_schema:{type:'object',properties:{cible:{type:'string',enum:['carte','caisse','stock','planning','mise_en_page']},semaine:{type:'string',description:'Pour le planning : date du lundi AAAA-MM-JJ'},nouveau:{type:'object',description:'Document complet (carte, caisse ou stock) ou {creneaux:[{membre,jour,debut,fin}]} pour le planning'},resume:{type:'string'}},required:['cible','nouveau','resume']}},
+ {name:'lire_config',description:'Lit une configuration : carte (produits et prix), caisse (réglages, motifs de sortie, seuils), stock (produits et fournisseurs).',input_schema:{type:'object',properties:{nom:{type:'string',enum:['carte','caisse','stock']}},required:['nom']}},
+ {name:'proposer_modification_donnees',description:'Propose de remplacer une configuration (carte, caisse ou stock) par une nouvelle version complète, ou de remplacer le planning d’une semaine. Le propriétaire valide d’un clic. Lis toujours la configuration actuelle avant, et ne change que ce qui est demandé.',input_schema:{type:'object',properties:{cible:{type:'string',enum:['carte','caisse','stock','planning']},semaine:{type:'string',description:'Pour le planning : date du lundi AAAA-MM-JJ'},nouveau:{type:'object',description:'Document complet (carte, caisse ou stock) ou {creneaux:[{membre,jour,debut,fin}]} pour le planning'},resume:{type:'string'}},required:['cible','nouveau','resume']}},
  {name:'lire_site',description:'Lit le code de l’espace propriétaire (index.html) ou gérant (gerant.html) : sans recherche, renvoie le plan ; avec une recherche, renvoie les passages qui la contiennent.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},recherche:{type:'string'}},required:['fichier']}},
  {name:'proposer_modification_site',description:'Propose une modification du code de index.html ou gerant.html sous forme de remplacements exacts (ancien → nouveau). Chaque « ancien » doit apparaître une seule fois. Le site est testé automatiquement avant que le propriétaire publie.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},modifications:{type:'array',items:{type:'object',properties:{ancien:{type:'string'},nouveau:{type:'string'}},required:['ancien','nouveau']}},resume:{type:'string'}},required:['fichier','modifications','resume']}}
 ];
@@ -1353,7 +1349,7 @@ document.addEventListener('click',function(e){
     var a=p.a, ref=a.cible==='planning'?db.collection('planning').doc(a.semaine):db.collection('config').doc(a.cible==='mise_en_page'?'espace_layout':a.cible);
     var doc=a.cible==='planning'?{semaine:a.semaine,creneaux:a.nouveau.creneaux,maj:Date.now()}:Object.assign({},a.nouveau,{maj:Date.now()});
     b.disabled=true;
-    ref.set(doc).then(function(){ zone.innerHTML='<span class="ok">✓ Appliquée</span>'; journalModif(a.resume); toast('Modification appliquée'); if(a.cible==='mise_en_page'){ MP.pages=doc.pages; if(!MP.edition) afficherPage(MP.courante); } }).catch(function(er){ zone.innerHTML='<span class="err">Échec : '+esc(er.code||er.message)+'</span>'; });
+    ref.set(doc).then(function(){ zone.innerHTML='<span class="ok">✓ Appliquée</span>'; journalModif(a.resume); toast('Modification appliquée');  }).catch(function(er){ zone.innerHTML='<span class="err">Échec : '+esc(er.code||er.message)+'</span>'; });
     return;
   }
   if(b.hasAttribute('data-pt')){
@@ -1913,7 +1909,8 @@ function rafraichirBlocsDuJour(){
 
 /* ---------- pages et navigation ---------- */
 var PASTILLES={};
-function mettrePastille(type,n){ PASTILLES[type]=n||0; if(typeof construireNav==='function' && MP.pages.length) construireNav(); }
+var ONGLETS_PASTILLE={'outil-equipe':['equipe','Équipe'],'outil-stock':['stock','Stock'],'outil-factures':['factures','Factures']};
+function mettrePastille(type,n){ PASTILLES[type]=n||0; var o=ONGLETS_PASTILLE[type]; if(o){ var bt=document.querySelector('[data-v="'+o[0]+'"]'); if(bt) bt.textContent=o[1]+(n?' ('+n+')':''); } }
 function pastillePage(p){ var t=0; p.blocs.forEach(function(b){ t+=PASTILLES[b.type]||0; }); return t; }
 function pageCourante(){ for(var i=0;i<MP.pages.length;i++) if(MP.pages[i].id===MP.courante) return MP.pages[i]; return MP.pages[0]; }
 function construireNav(){
