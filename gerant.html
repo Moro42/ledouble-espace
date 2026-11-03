@@ -466,9 +466,9 @@ function proposer(lu,c){
    ===================================================================== */
 var STOCKCFG={produits:[],fournisseurs:[]}, MVTS=[];
 var PRODUITS_BASE=[
-  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'hamburger',nom:'Hamburger',unite:'pièces'},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'baguettes',nom:'Baguettes',unite:'pièces'},{id:'hamburger',nom:'Hamburger',unite:'pièces'},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
   {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
-  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces',prix:52},{id:'frites',nom:'Frites',unite:'kg'},
+  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces'},{id:'frites',nom:'Frites',unite:'kg'},
   {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
   {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
 ].map(function(p){ p.actif=true; p.cree='carte'; return p; });
@@ -775,7 +775,7 @@ function confirmerLivraison(d,factureId){
     lignes.forEach(function(l,i){
       var q=n2g(document.querySelector('[data-q="l'+i+'"]').value); if(!(q>0)) return;
       var id=l.produit;
-      if(!id){ id='p'+Date.now().toString(36)+i; nouveaux.push({id:id,nom:l.nomProduit.slice(0,60),unite:l.unite||'pièces',actif:true,prix:l.prix?Math.round(l.prix*100/(l.piecesParUnite||1)):null,cree:'livraison'}); }
+      if(!id){ id='p'+Date.now().toString(36)+i; nouveaux.push({id:id,nom:l.nomProduit.slice(0,60),unite:l.unite||'pièces',actif:true,cree:'livraison'}); }
       lg.push({produit:id,qte:q});
     });
     var fId=four?('f'+normN(four).replace(/ /g,'-').slice(0,30)):null;
