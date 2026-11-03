@@ -465,7 +465,21 @@ function proposer(lu,c){
    STOCK, LIVRAISONS, INVENTAIRE, PERTES, COMMANDES, NOTES (côté gérant)
    ===================================================================== */
 var STOCKCFG={produits:[],fournisseurs:[]}, MVTS=[];
+var PRODUITS_BASE=[
+  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'steaks',nom:'Steaks',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
+  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces',prix:52},{id:'frites',nom:'Frites',unite:'kg'},
+  {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
+  {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
+].map(function(p){ p.actif=true; p.cree='carte'; return p; });
+var SEMIS_FAIT=false;
 function chargerStock(cb){
+  var cbOrig=cb;
+  cb=function(){
+    if(!SEMIS_FAIT && !(STOCKCFG.produits||[]).length){ SEMIS_FAIT=true;
+      completerStockCfg(PRODUITS_BASE.map(function(x){ return Object.assign({},x); }),null).then(function(){ chargerStock(cbOrig); }).catch(function(){ cbOrig(); }); return; }
+    cbOrig();
+  };
   var depuis=jour(ajouterJours(new Date(),-120));
   Promise.all([
     db.collection('config').doc('stock').get().catch(function(){ return null; }),

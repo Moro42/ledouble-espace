@@ -1295,7 +1295,22 @@ document.addEventListener('click',function(ev){
 /* ---------- STOCK (propriétaire) ---------- */
 function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
 var SC={produits:[],fournisseurs:[]}, SMV=[], SC_SUPPR={};
+var PRODUITS_BASE=[
+  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'steaks',nom:'Steaks',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
+  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces',prix:52},{id:'frites',nom:'Frites',unite:'kg'},
+  {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
+  {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
+].map(function(p){ p.actif=true; p.cree='carte'; return p; });
+function semerStockSiVide(){
+  var ref=db.collection('config').doc('stock');
+  return ref.get().then(function(s){ var c=s.exists?s.data():{produits:[],fournisseurs:[]}; if((c.produits||[]).length) return false;
+    c.produits=PRODUITS_BASE.map(function(x){ return Object.assign({},x); }); c.fournisseurs=c.fournisseurs||[]; c.maj=Date.now(); return ref.set(c).then(function(){ return true; }); });
+}
 function initStock(){
+  semerStockSiVide().catch(function(){}).then(function(){ initStockSuite(); });
+}
+function initStockSuite(){
   var depuis=jour(new Date(Date.now()-120*864e5));
   Promise.all([
     db.collection('config').doc('stock').get(),
