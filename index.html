@@ -1296,15 +1296,21 @@ document.addEventListener('click',function(ev){
 function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
 var SC={produits:[],fournisseurs:[]}, SMV=[], SC_SUPPR={};
 var PRODUITS_BASE=[
-  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'steaks',nom:'Steaks',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'hamburger',nom:'Hamburger',unite:'pièces'},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
   {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
   {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces',prix:52},{id:'frites',nom:'Frites',unite:'kg'},
   {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
   {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
 ].map(function(p){ p.actif=true; p.cree='carte'; return p; });
+function miseANiveauProduits(c){
+  var change=false; c.produits=c.produits||[];
+  c.produits.forEach(function(p){ if(p.id==='steaks'&&p.nom==='Steaks'){ p.nom='Hamburger'; change=true; } });
+  if(c.produits.length && !c.produits.some(function(p){ return p.id==='mulky'||String(p.nom||'').toLowerCase()==='mulky'; })){ c.produits.push({id:'mulky',nom:'Mulky',unite:'pièces',actif:true,cree:'carte'}); change=true; }
+  return change;
+}
 function semerStockSiVide(){
   var ref=db.collection('config').doc('stock');
-  return ref.get().then(function(s){ var c=s.exists?s.data():{produits:[],fournisseurs:[]}; if((c.produits||[]).length) return false;
+  return ref.get().then(function(s){ var c=s.exists?s.data():{produits:[],fournisseurs:[]}; if((c.produits||[]).length){ if(miseANiveauProduits(c)){ c.maj=Date.now(); return ref.set(c).then(function(){ return true; }); } return false; }
     c.produits=PRODUITS_BASE.map(function(x){ return Object.assign({},x); }); c.fournisseurs=c.fournisseurs||[]; c.maj=Date.now(); return ref.set(c).then(function(){ return true; }); });
 }
 function initStock(){
@@ -1380,9 +1386,9 @@ document.addEventListener('click',function(ev){
 });
 
 /* ---------- SORTIES DU JOUR : UTILISÉ / ATTENDU ---------- */
-var REGLES_DEFAUT={baguetteSimple:0.3333,baguetteDouble:0.5,steakSimple:1,steakDouble:2,mexicanos:1,pouletSimple:1,pouletDouble:2,cheddar:2,gouda:2,oeuf:1,canette:1,map:{}};
-var MOTS_PRODUIT={baguette:['baguette','pain'],steak:['steak','burger','hamburger'],mexicanos:['mexicano'],poulet:['poulet'],cheddar:['cheddar'],gouda:['gouda'],oeuf:['oeuf','œuf'],canette:['canette','boisson','soda','coca'],frites:['frite'],crudites:['crudite','salade','tomate']};
-var NOM_REGLE={baguette:'Baguettes',steak:'Steaks (hamburger et mulky)',mexicanos:'Mexicanos',poulet:'Poulet pané',cheddar:'Cheddar',gouda:'Gouda',oeuf:'Œufs',canette:'Canettes',frites:'Frites (moyenne apprise)',crudites:'Crudités (moyenne apprise)'};
+var REGLES_DEFAUT={baguetteSimple:0.3333,baguetteDouble:0.5,steakSimple:1,steakDouble:2,mulkySimple:1,mulkyDouble:2,mexicanos:1,pouletSimple:1,pouletDouble:2,cheddar:2,gouda:2,oeuf:1,canette:1,map:{}};
+var MOTS_PRODUIT={baguette:['baguette','pain'],steak:['hamburger','burger','steak'],mulky:['mulky'],mexicanos:['mexicano'],poulet:['poulet'],cheddar:['cheddar'],gouda:['gouda'],oeuf:['oeuf','œuf'],canette:['canette','boisson','soda','coca'],frites:['frite'],crudites:['crudite','salade','tomate']};
+var NOM_REGLE={baguette:'Baguettes',steak:'Hamburger',mulky:'Mulky',mexicanos:'Mexicanos',poulet:'Poulet pané',cheddar:'Cheddar',gouda:'Gouda',oeuf:'Œufs',canette:'Canettes',frites:'Frites (moyenne apprise)',crudites:'Crudités (moyenne apprise)'};
 function reglesConso(){ var r=JSON.parse(JSON.stringify(REGLES_DEFAUT)); var c=(SC&&SC.regles)||{}; for(var k in c) r[k]=c[k]; r.map=Object.assign({},REGLES_DEFAUT.map,c.map||{}); return r; }
 function produitRegle(cle,R){
   if(R.map[cle]) return R.map[cle];
@@ -1391,14 +1397,15 @@ function produitRegle(cle,R){
 }
 /* ce que les ventes d'une journée auraient dû consommer */
 function attenduDesVentes(evs,R){
-  var ann={}, a={baguette:0,steak:0,mexicanos:0,poulet:0,cheddar:0,gouda:0,oeuf:0,canette:0}, portionsFrites=0, sandwichs=0;
+  var ann={}, a={baguette:0,steak:0,mulky:0,mexicanos:0,poulet:0,cheddar:0,gouda:0,oeuf:0,canette:0}, portionsFrites=0, sandwichs=0;
   evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
   evs.forEach(function(x){
     if(x.type!=='vente'||ann[x.id]) return;
     (x.lignes||[]).forEach(function(l){
       var q=l.q||1, dbl=l.s==='double', sand=l.s==='simple'||l.s==='double';
       if(sand){ sandwichs+=q; a.baguette+=q*(dbl?R.baguetteDouble:R.baguetteSimple);
-        if(l.p==='hamburger'||l.p==='mulky') a.steak+=q*(dbl?R.steakDouble:R.steakSimple);
+        if(l.p==='hamburger') a.steak+=q*(dbl?R.steakDouble:R.steakSimple);
+        if(l.p==='mulky') a.mulky+=q*(dbl?R.mulkyDouble:R.mulkySimple);
         if(l.p==='mexicanos') a.mexicanos+=q*R.mexicanos;
         if(l.p==='poulet') a.poulet+=q*(dbl?R.pouletDouble:R.pouletSimple); }
       if(l.fr||l.m) portionsFrites+=q;
@@ -1423,7 +1430,7 @@ function rendreSortiesJour(){
     Object.keys(parJour).forEach(function(jj){ var aj=attenduDesVentes(parJour[jj],R), uj=utiliseDuJour(jj);
       ['frites','crudites'].forEach(function(k){ var pid=produitRegle(k,R); if(pid&&uj[pid]){ appr[k].u+=uj[pid]; appr[k].n+=(k==='frites'?aj.portionsFrites:aj.sandwichs); } }); });
     var lignes='', valeur=0;
-    ['baguette','steak','mexicanos','poulet','cheddar','gouda','oeuf','canette'].forEach(function(k){
+    ['baguette','steak','mulky','mexicanos','poulet','cheddar','gouda','oeuf','canette'].forEach(function(k){
       var pid=produitRegle(k,R), p=pid?prodP(pid):null, ut=pid?(u[pid]||0):0, at=att.a[k];
       if(!pid && !at) return;
       if(p&&p.prix) valeur+=p.prix*ut;
@@ -1449,8 +1456,8 @@ function rendreRegles(){
   function champ(k,lib){ return '<label class="f">'+lib+'<input class="in px num" data-rgl="'+k+'" inputmode="decimal" value="'+String(Math.round(R[k]*1000)/1000).replace('.',',')+'"></label>'; }
   function sel(k){ var cur=produitRegle(k,R); return '<label class="f">'+NOM_REGLE[k]+'<select class="in" data-rgm="'+k+'"><option value="">— non suivi —</option>'+(SC.produits||[]).map(function(p){ return '<option value="'+p.id+'" '+(p.id===cur?'selected':'')+'>'+esc(p.nom)+'</option>'; }).join('')+'</select></label>'; }
   el.innerHTML='<p class="note">Quantités sorties pour chaque vente. Les frites et les crudités n’ont pas de règle fixe : la moyenne est apprise à partir des sorties du jour.</p>'+
-    '<div class="grid three">'+champ('baguetteSimple','Baguette par sandwich simple')+champ('baguetteDouble','Baguette par sandwich double')+champ('steakSimple','Steaks · simple (hamburger, mulky)')+champ('steakDouble','Steaks · double (hamburger, mulky)')+champ('mexicanos','Mexicanos par sandwich')+champ('pouletSimple','Poulet pané · simple')+champ('pouletDouble','Poulet pané · double')+champ('cheddar','Tranches de cheddar par extra')+champ('gouda','Tranches de gouda par extra')+champ('oeuf','Œufs par extra')+champ('canette','Canettes par boisson')+'</div>'+
-    '<p class="note" style="margin-top:12px">Produit du stock correspondant à chaque règle (relié automatiquement d’après le nom ; corrige si besoin) :</p><div class="grid three">'+['baguette','steak','mexicanos','poulet','cheddar','gouda','oeuf','canette','frites','crudites'].map(sel).join('')+'</div>'+
+    '<div class="grid three">'+champ('baguetteSimple','Baguette par sandwich simple')+champ('baguetteDouble','Baguette par sandwich double')+champ('steakSimple','Hamburger · simple (pièces)')+champ('steakDouble','Hamburger · double (pièces)')+champ('mulkySimple','Mulky · simple (pièces)')+champ('mulkyDouble','Mulky · double (pièces)')+champ('mexicanos','Mexicanos par sandwich')+champ('pouletSimple','Poulet pané · simple')+champ('pouletDouble','Poulet pané · double')+champ('cheddar','Tranches de cheddar par extra')+champ('gouda','Tranches de gouda par extra')+champ('oeuf','Œufs par extra')+champ('canette','Canettes par boisson')+'</div>'+
+    '<p class="note" style="margin-top:12px">Produit du stock correspondant à chaque règle (relié automatiquement d’après le nom ; corrige si besoin) :</p><div class="grid three">'+['baguette','steak','mulky','mexicanos','poulet','cheddar','gouda','oeuf','canette','frites','crudites'].map(sel).join('')+'</div>'+
     '<button class="btn small prim" id="skReglesOk" style="margin-top:10px">Enregistrer les règles</button>';
 }
 document.addEventListener('click',function(e){

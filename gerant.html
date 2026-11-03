@@ -466,16 +466,24 @@ function proposer(lu,c){
    ===================================================================== */
 var STOCKCFG={produits:[],fournisseurs:[]}, MVTS=[];
 var PRODUITS_BASE=[
-  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'steaks',nom:'Steaks',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'baguettes',nom:'Baguettes',unite:'pièces',prix:75},{id:'hamburger',nom:'Hamburger',unite:'pièces'},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
   {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
   {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces',prix:52},{id:'frites',nom:'Frites',unite:'kg'},
   {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
   {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
 ].map(function(p){ p.actif=true; p.cree='carte'; return p; });
+function miseANiveauProduits(c){
+  var change=false; c.produits=c.produits||[];
+  c.produits.forEach(function(p){ if(p.id==='steaks'&&p.nom==='Steaks'){ p.nom='Hamburger'; change=true; } });
+  if(c.produits.length && !c.produits.some(function(p){ return p.id==='mulky'||String(p.nom||'').toLowerCase()==='mulky'; })){ c.produits.push({id:'mulky',nom:'Mulky',unite:'pièces',actif:true,cree:'carte'}); change=true; }
+  return change;
+}
 var SEMIS_FAIT=false;
 function chargerStock(cb){
   var cbOrig=cb;
   cb=function(){
+    if(!SEMIS_FAIT && (STOCKCFG.produits||[]).length){ SEMIS_FAIT=true; var ref=db.collection('config').doc('stock');
+      ref.get().then(function(sn){ var c=sn.exists?sn.data():null; if(c&&miseANiveauProduits(c)){ c.maj=Date.now(); return ref.set(c).then(function(){ chargerStock(cbOrig); }); } cbOrig(); }).catch(function(){ cbOrig(); }); return; }
     if(!SEMIS_FAIT && !(STOCKCFG.produits||[]).length){ SEMIS_FAIT=true;
       completerStockCfg(PRODUITS_BASE.map(function(x){ return Object.assign({},x); }),null).then(function(){ chargerStock(cbOrig); }).catch(function(){ cbOrig(); }); return; }
     cbOrig();
