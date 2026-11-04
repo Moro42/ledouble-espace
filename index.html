@@ -322,7 +322,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h3>Heures prestées · <span id="eqHeuresTitre"></span></h3>
       <div class="inline" style="margin-bottom:10px"><button class="btn small sec" data-hper="semaine">Semaine en cours</button><button class="btn small sec" data-hper="prec">Semaine dernière</button><button class="btn small sec" data-hper="mois">Mois en cours</button><button class="btn small dark" id="eqExport">Exporter pour le secrétariat social</button></div>
       <div class="card" id="eqHeures"><div class="empty">Chargement…</div></div>
-      <h3>Badges de pointage</h3><div class="card" id="eqBadges"><p class="note" style="margin:0">Chargement…</p></div>
+      <div id="eqBadges" class="hidden"></div>
       <h3>Membres de l’équipe</h3><div class="card" id="eqMembres"></div>
       <button class="btn small dark" id="eqAddM" style="margin-top:10px">+ Ajouter une personne</button>
       <div id="eqForm" class="hidden" style="margin-top:12px"></div>
@@ -1113,7 +1113,6 @@ function initEquipe(){
   // config/equipe : noms et fonctions (lisible par le gérant) ; config/equipe_prive : contrats et coûts (toi seul)
   Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get(),chargerBadges()]).then(function(r){
     EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
-    setTimeout(suivreBadgesInconnus,0);
     var pv=r[1].exists?(r[1].data().membres||{}):{};
     EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
   }).catch(function(){}).then(function(){
@@ -1127,7 +1126,7 @@ function rendreMembres(quotas){
   $('eqMembres').innerHTML=(EQ.membres.length?EQ.membres.map(function(m,i){
     var q='';
     if(m.role==='etudiant'){ var u=(m.soldeDepart||0)*60+(quotas[m.id]||0); q=' · <b class="num" style="color:'+(u>600*60?'var(--danger)':u>500*60?'var(--warn)':'var(--ink)')+'">'+Math.round(u/60)+' h utilisées sur 650</b>'; }
-    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':'')+q+'</span><br><span class="note">'+(badgeDe(m.id)?'<span style="color:var(--ok);font-weight:700">Badge ✓</span> · <a href="#" data-badgex="'+m.id+'" style="color:var(--danger)">retirer</a>':'<span style="color:var(--warn)">Pas de badge</span>')+'</span></span><button class="btn small sec" data-editm="'+i+'">Modifier</button></div>';
+    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':'')+q+'</span></span><button class="btn small sec" data-editm="'+i+'">Modifier</button></div>';
   }).join(''):'<div class="empty">Aucune personne pour l’instant.</div>');
 }
 function editerMembre(i){
@@ -1315,15 +1314,16 @@ document.addEventListener('click',function(ev){
 function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
 var SC={produits:[],fournisseurs:[]}, SMV=[], SC_SUPPR={};
 var PRODUITS_BASE=[
-  {id:'baguettes',nom:'Baguettes',unite:'pièces'},{id:'hamburger',nom:'Hamburger',unite:'pièces'},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
+  {id:'baguettes',nom:'Baguettes',unite:'pièces'},{id:'hamburger',nom:'Hamburger',unite:'pièces',cond:'boîte',contenu:30},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
   {id:'poulet',nom:'Poulet pané',unite:'pièces'},{id:'cheddar',nom:'Cheddar',unite:'tranches'},{id:'gouda',nom:'Gouda',unite:'tranches'},
-  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces'},{id:'frites',nom:'Frites',unite:'kg'},
+  {id:'oeufs',nom:'Œufs',unite:'pièces'},{id:'canettes',nom:'Canettes',unite:'pièces'},{id:'frites',nom:'Frites',unite:'kg',cond:'sac',contenu:2.5},
   {id:'crudites',nom:'Crudités',unite:'kg'},{id:'feta',nom:'Feta',unite:'kg'},{id:'oignons_frits',nom:'Oignons frits',unite:'kg'},
   {id:'oignon_caramel',nom:'Oignon caramélisé',unite:'kg'},{id:'jalapenos',nom:'Jalapeños',unite:'kg'}
 ].map(function(p){ p.actif=true; p.cree='carte'; return p; });
 function miseANiveauProduits(c){
   var change=false; c.produits=c.produits||[];
   c.produits.forEach(function(p){ if(p.id==='steaks'&&p.nom==='Steaks'){ p.nom='Hamburger'; change=true; } });
+  c.produits.forEach(function(p){ if(!p.cond&&(p.id==='frites'||p.nom==='Frites')){ p.cond='sac'; p.contenu=2.5; change=true; } if(!p.cond&&(p.id==='hamburger'||p.id==='steaks'||p.nom==='Hamburger')){ p.cond='boîte'; p.contenu=30; change=true; } });
   if(c.produits.length && !c.produits.some(function(p){ return p.id==='mulky'||String(p.nom||'').toLowerCase()==='mulky'; })){ c.produits.push({id:'mulky',nom:'Mulky',unite:'pièces',actif:true,cree:'carte'}); change=true; }
   return change;
 }
@@ -1352,11 +1352,13 @@ function initStockSuite(){
 function stockP(id){ var q=null; mvtsSansAnnules(SMV).forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==id) return; if(m.type==='inventaire') q=l.qte; else if(m.type==='reception') q=(q||0)+l.qte; else if(m.type==='perte'||m.type==='consommation') q=(q||0)-l.qte; }); }); return q; }
 function prodP(id){ var r=null; SC.produits.forEach(function(p){ if(p.id===id) r=p; }); return r; }
 function fourP(id){ var r=null; SC.fournisseurs.forEach(function(f){ if(f.id===id) r=f; }); return r; }
+function pluP(mot,n){ return n>1&&!/[sx]$/i.test(mot)?mot+'s':mot; }
+function qCond(q,p){ var b=qFmt(q,p&&p.unite); if(q==null||!p||!p.cond||!(p.contenu>0)||q<p.contenu) return b; var n=Math.round(q/p.contenu*10)/10; return b+' ('+String(n).replace('.',',')+' '+pluP(p.cond,n)+')'; }
 function qFmt(q,u){ return (q==null?'?':String(Math.round(q*100)/100).replace('.',','))+' '+(u||''); }
 function rendreStockP(){
   var act=SC.produits.filter(function(p){return p.actif!==false}), bas=0;
   var h=act.map(function(p){ var q=stockP(p.id), lo=q!=null&&p.seuil!=null&&q<=p.seuil; if(lo) bas++;
-    return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+qFmt(q,p.unite)+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
+    return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+qCond(q,p)+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
   $('skEtat').innerHTML=act.length?h:'<div class="empty">Ajoute d’abord tes produits et fournisseurs plus bas.</div>';
   $('skResume').textContent=act.length?(bas?bas+' produit'+(bas>1?'s':'')+' sous le seuil':'Aucun produit sous le seuil'):'';
   mettrePastille('outil-stock',bas);
@@ -1381,14 +1383,14 @@ function rendreCommandesP(cmds){
 function rendreConfigStock(){
   var fo=SC.fournisseurs.map(function(f,i){ return '<tr data-i="'+i+'"><td><input class="in" data-k="nom" value="'+esc(f.nom)+'"></td><td><input class="in" data-k="email" value="'+esc(f.email||'')+'" placeholder="commande@…"></td><td><input class="in" data-k="telephone" value="'+esc(f.telephone||'')+'"></td><td><input class="in" data-k="jourCommande" value="'+esc(f.jourCommande||'')+'" placeholder="ex. lundi"></td><td><button class="btn small danger" data-delf="'+i+'">✕</button></td></tr>'; }).join('');
   var opts=function(sel){ return '<option value="">—</option>'+SC.fournisseurs.map(function(f){ return '<option value="'+f.id+'" '+(f.id===sel?'selected':'')+'>'+esc(f.nom)+'</option>'; }).join(''); };
-  var pr=SC.produits.map(function(p,i){ return '<tr data-i="'+i+'"><td><input class="in" data-k="nom" value="'+esc(p.nom)+'"></td><td><input class="in px" data-k="unite" value="'+esc(p.unite||'')+'" placeholder="pièces, kg…"></td><td><input class="in px num" data-k="seuil" inputmode="decimal" value="'+(p.seuil!=null?String(p.seuil).replace('.',','):'')+'"></td><td><input class="in px num" data-k="cible" inputmode="decimal" value="'+(p.cible!=null?String(p.cible).replace('.',','):'')+'"></td><td><select class="in" data-k="fournisseur">'+opts(p.fournisseur)+'</select></td><td><label class="switch"><input type="checkbox" data-k="actif" '+(p.actif!==false?'checked':'')+'></label></td><td><button class="btn small danger" data-delp="'+i+'">✕</button></td></tr>'; }).join('');
+  var pr=SC.produits.map(function(p,i){ return '<tr data-i="'+i+'"><td><input class="in" data-k="nom" value="'+esc(p.nom)+'"></td><td><input class="in px" data-k="unite" value="'+esc(p.unite||'')+'" placeholder="pièces, kg…"></td><td><input class="in px" data-k="cond" value="'+esc(p.cond||'')+'" placeholder="sac, boîte…"></td><td><input class="in px num" data-k="contenu" inputmode="decimal" value="'+(p.contenu!=null?String(p.contenu).replace('.',','):'')+'" placeholder="ex. 2,5"></td><td><input class="in px num" data-k="seuil" inputmode="decimal" value="'+(p.seuil!=null?String(p.seuil).replace('.',','):'')+'"></td><td><input class="in px num" data-k="cible" inputmode="decimal" value="'+(p.cible!=null?String(p.cible).replace('.',','):'')+'"></td><td><select class="in" data-k="fournisseur">'+opts(p.fournisseur)+'</select></td><td><label class="switch"><input type="checkbox" data-k="actif" '+(p.actif!==false?'checked':'')+'></label></td><td><button class="btn small danger" data-delp="'+i+'">✕</button></td></tr>'; }).join('');
   $('skConfig').innerHTML='<h3>Fournisseurs</h3><div class="card scroll"><table class="table" id="tFour"><tr><th>Nom</th><th>E-mail de commande</th><th>Téléphone</th><th>Jour de commande</th><th></th></tr>'+fo+'</table><button class="btn small sec" id="skAddF" style="margin-top:10px">+ Ajouter un fournisseur</button></div>'+
-    '<h3>Produits suivis</h3><div class="card scroll"><table class="table" id="tProd"><tr><th>Produit</th><th>Unité</th><th>Seuil d’alerte</th><th>Stock visé</th><th>Fournisseur</th><th>Suivi</th><th></th></tr>'+pr+'</table><button class="btn small sec" id="skAddP" style="margin-top:10px">+ Ajouter un produit</button><p class="note">Le « stock visé » sert à calculer les quantités conseillées dans les commandes (par défaut : 2 × le seuil).</p></div>';
+    '<h3>Produits suivis</h3><div class="card scroll"><table class="table" id="tProd"><tr><th>Produit</th><th>Unité de base</th><th>Conditionnement</th><th>Contenu</th><th>Seuil d’alerte</th><th>Stock visé</th><th>Fournisseur</th><th>Suivi</th><th></th></tr>'+pr+'</table><button class="btn small sec" id="skAddP" style="margin-top:10px">+ Ajouter un produit</button><p class="note">Le « stock visé » sert à calculer les quantités conseillées dans les commandes (par défaut : 2 × le seuil).</p></div>';
 }
 function lireConfigStock(){
   var num=function(v){ v=String(v||'').replace(',','.').trim(); if(v==='') return null; var n=parseFloat(v); return isNaN(n)?null:n; };
   SC.fournisseurs=Array.prototype.map.call(document.querySelectorAll('#tFour tr[data-i]'),function(tr){ var o=SC.fournisseurs[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){return tr.querySelector('[data-k="'+k+'"]').value.trim()}; return {id:o.id||('f'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),email:g('email'),telephone:g('telephone'),jourCommande:g('jourCommande')}; }).filter(function(f){return f.nom});
-  SC.produits=Array.prototype.map.call(document.querySelectorAll('#tProd tr[data-i]'),function(tr){ var o=SC.produits[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){var el=tr.querySelector('[data-k="'+k+'"]');return el.type==='checkbox'?el.checked:el.value.trim()}; return {id:o.id||('p'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),unite:g('unite'),seuil:num(g('seuil')),cible:num(g('cible')),fournisseur:g('fournisseur')||null,actif:g('actif')}; }).filter(function(p){return p.nom});
+  SC.produits=Array.prototype.map.call(document.querySelectorAll('#tProd tr[data-i]'),function(tr){ var o=SC.produits[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){var el=tr.querySelector('[data-k="'+k+'"]');return el.type==='checkbox'?el.checked:el.value.trim()}; return {id:o.id||('p'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),unite:g('unite'),cond:g('cond')||null,contenu:num(g('contenu')),seuil:num(g('seuil')),cible:num(g('cible')),fournisseur:g('fournisseur')||null,actif:g('actif')}; }).filter(function(p){return p.nom});
 }
 document.addEventListener('click',function(ev){
   var b=ev.target.closest('button'); if(!b || !$('v-stock') || $('v-stock').className.indexOf('on')<0) return;
@@ -1454,7 +1456,7 @@ function rendreSortiesJour(){
       if(!pid && !at) return;
       if(pid&&prixAchat(pid)) valeur+=prixAchat(pid)*ut;
       var ec=ut-at, pc=at?ec*100/at:0, coul=!pid?'var(--ink-soft)':Math.abs(pc)<=5?'var(--ok)':Math.abs(pc)<=12?'var(--warn)':'var(--danger)';
-      lignes+='<tr><td>'+esc(p?p.nom:NOM_REGLE[k])+(pid?'':' <span class="note">(produit non relié)</span>')+'</td><td class="num">'+(pid?fmtQ(ut):'—')+'</td><td class="num">'+fmtQ(at)+'</td><td class="num" style="color:'+coul+';font-weight:700">'+(pid&&at?(ec>0?'+':'')+fmtQ(ec)+' · '+(pc>0?'+':'')+Math.round(pc)+' %':'—')+'</td></tr>';
+      lignes+='<tr><td>'+esc(p?p.nom:NOM_REGLE[k])+(pid?'':' <span class="note">(produit non relié)</span>')+'</td><td class="num">'+(pid?esc(qCond(ut,p)):'—')+'</td><td class="num">'+(p?esc(qCond(at,p)):fmtQ(at))+'</td><td class="num" style="color:'+coul+';font-weight:700">'+(pid&&at?(ec>0?'+':'')+fmtQ(ec)+' · '+(pc>0?'+':'')+Math.round(pc)+' %':'—')+'</td></tr>';
     });
     ['frites','crudites'].forEach(function(k){
       var pid=produitRegle(k,R), p=pid?prodP(pid):null, ut=pid?(u[pid]||0):0, n=k==='frites'?att.portionsFrites:att.sandwichs;
@@ -2395,6 +2397,7 @@ function prixUnitaireStock(l,p){
   var pu=parseFloat(l.prixUnitaireHT); if(!(pu>0)) return null;
   if(l.piecesParUnite>0) return Math.round(pu*100/l.piecesParUnite);
   var u=sansAccent(l.unite), up=sansAccent(p.unite);
+  if(p.cond&&p.contenu>0&&u&&(u.indexOf(sansAccent(p.cond))===0||sansAccent(p.cond).indexOf(u)===0)) return Math.round(pu*100/p.contenu);
   if(up==='kg'&&(u==='kg'||u==='kilo'||u==='kilos')) return Math.round(pu*100);
   if((up==='pieces'||up==='piece'||up==='')&&UNITES_PIECE.indexOf(u)>=0) return Math.round(pu*100);
   if(up===u) return Math.round(pu*100);
