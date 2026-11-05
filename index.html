@@ -372,6 +372,8 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h3>Compte de résultat</h3>
       <div class="inline" style="margin-bottom:10px"><label class="note">Mois <input class="in" type="month" id="fiMois" style="width:auto"></label></div>
       <div class="card" id="fiResultat"></div>
+      <h3>Dépenses diverses du mois</h3>
+      <div class="card" id="fiDepenses"><div class="empty">Chargement…</div></div>
       <h3>Charges fixes mensuelles</h3>
       <div class="card form" id="fiCharges"></div>
       <h3>TVA du mois</h3>
@@ -1599,11 +1601,12 @@ var BRIEFING_DEFAUT=[
 ].join('\n');
 
 var OUTILS=[
+ {name:'lire_food_cost',description:'Food cost théorique jour par jour, calculé à partir des VENTES (règles de consommation × prix d’achat de l’onglet Finances), avec le CA brut TTC, le CA HT, la valeur de la matière consommée, le pourcentage, le détail par produit et les prix manquants. À utiliser pour toute question de food cost. Dates AAAA-MM-JJ, 62 jours maximum.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_ventes',description:'Analyse des ventes sur une période : totaux, par jour, par heure, produits, extras, boissons, paiements, annulations, sorties d’argent, menus et ventes additionnelles. Dates au format AAAA-MM-JJ.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_controle_caisse',description:'Ouvertures, clôtures à l’aveugle, attendu, compté et écarts de caisse jour par jour sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_equipe',description:'Membres de l’équipe, planning et heures prestées (pointages), retards, sur une période.',input_schema:{type:'object',properties:{du:{type:'string'},au:{type:'string'}},required:['du','au']}},
  {name:'lire_stock',description:'Produits suivis, stock actuel, livraisons, inventaires et pertes des 60 derniers jours, commandes récentes.',input_schema:{type:'object',properties:{}}},
- {name:'lire_config',description:'Lit une configuration : carte (produits et prix), caisse (réglages, motifs de sortie, seuils), stock (produits et fournisseurs).',input_schema:{type:'object',properties:{nom:{type:'string',enum:['carte','caisse','stock']}},required:['nom']}},
+ {name:'lire_config',description:'Lit une configuration : carte (produits et prix), caisse (réglages, motifs de sortie, seuils), stock (produits et fournisseurs).',input_schema:{type:'object',properties:{nom:{type:'string',enum:['carte','caisse','stock','prix']}},required:['nom']}},
  {name:'proposer_modification_donnees',description:'Propose de remplacer une configuration (carte, caisse ou stock) par une nouvelle version complète, ou de remplacer le planning d’une semaine. Le propriétaire valide d’un clic. Lis toujours la configuration actuelle avant, et ne change que ce qui est demandé.',input_schema:{type:'object',properties:{cible:{type:'string',enum:['carte','caisse','stock','planning']},semaine:{type:'string',description:'Pour le planning : date du lundi AAAA-MM-JJ'},nouveau:{type:'object',description:'Document complet (carte, caisse ou stock) ou {creneaux:[{membre,jour,debut,fin}]} pour le planning'},resume:{type:'string'}},required:['cible','nouveau','resume']}},
  {name:'lire_site',description:'Lit le code de l’espace propriétaire (index.html) ou gérant (gerant.html) : sans recherche, renvoie le plan ; avec une recherche, renvoie les passages qui la contiennent.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},recherche:{type:'string'}},required:['fichier']}},
  {name:'proposer_modification_site',description:'Propose une modification du code de index.html ou gerant.html sous forme de remplacements exacts (ancien → nouveau). Chaque « ancien » doit apparaître une seule fois. Le site est testé automatiquement avant que le propriétaire publie.',input_schema:{type:'object',properties:{fichier:{type:'string',enum:['index.html','gerant.html']},modifications:{type:'array',items:{type:'object',properties:{ancien:{type:'string'},nouveau:{type:'string'}},required:['ancien','nouveau']}},resume:{type:'string'}},required:['fichier','modifications','resume']}}
@@ -1738,14 +1741,33 @@ document.addEventListener('click',function(e){
 });
 
 /* ---------- boucle de discussion ---------- */
+function outilFoodCost(a){
+  var du=String(a.du||jour()), au=String(a.au||jour());
+  if((new Date(au)-new Date(du))/864e5>62) return Promise.resolve('Période trop longue : 62 jours maximum.');
+  return Promise.all([db.collection('config').doc('stock').get(),PRIX_CHARGE?null:chargerPrix(),db.collection('evenements').where('jour','>=',du).where('jour','<=',au).get()]).then(function(r){
+    var sc=r[0].exists?r[0].data():{produits:[]}; if(!SC||!SC.produits||!SC.produits.length){ SC=sc; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; }
+    var R=reglesConso(), ratios=PRIX.appris||{}, evs=r[2].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}), ann={}, parJour={}, tot={conso:{},ca:0};
+    evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
+    evs.forEach(function(x){ if(x.type!=='vente'||ann[x.id]) return; var d=parJour[x.jour]=parJour[x.jour]||{conso:{},ca:0,tickets:0}; d.ca+=x.total; d.tickets++; tot.ca+=x.total;
+      var c=consoVente(x,R,ratios); Object.keys(c).forEach(function(pid){ d.conso[pid]=(d.conso[pid]||0)+c[pid]; tot.conso[pid]=(tot.conso[pid]||0)+c[pid]; }); });
+    var tva=REGC.tvaVentes!=null?REGC.tvaVentes:6, nom=function(id){ var p=(SC.produits||[]).filter(function(x){return x.id===id})[0]; return p?p.nom:id; };
+    function bilan(d){ var v=valeurConso(d.conso), ht=d.ca/(1+tva/100); return {caTTC:Math.round(d.ca)/100,caHT:Math.round(ht)/100,matiere:Math.round(v.v)/100,foodCostPct:ht&&v.v?Math.round(v.v*1000/ht)/10:null}; }
+    var jours=Object.keys(parJour).sort().map(function(j){ var b=bilan(parJour[j]); b.jour=j; b.tickets=parJour[j].tickets; return b; });
+    var manque=Object.keys(tot.conso).filter(function(pid){ return prixAchat(pid)==null; }).map(nom);
+    return JSON.stringify({periode:du+' → '+au,tauxTVAventes:tva,total:bilan(tot),jours:jours,
+      consommationParProduit:Object.keys(tot.conso).map(function(pid){ var pr=prixAchat(pid); return {produit:nom(pid),quantite:Math.round(tot.conso[pid]*100)/100,unite:((SC.produits||[]).filter(function(x){return x.id===pid})[0]||{}).unite||'',prixAchatUnitaire:pr!=null?pr/100:null,valeur:pr!=null?Math.round(pr*tot.conso[pid])/100:null}; }),
+      prixManquants:manque,fritesEtCrudites:ratios.frites?'moyenne apprise incluse':'frites non comptées (moyenne pas encore apprise)',
+      note:'Calcul théorique à partir des ventes et des règles de consommation. Le food cost réel (avec pertes) se calcule aux inventaires.'});
+  });
+}
 function executerOutil(bloc){
   var a=bloc.input||{}, id=bloc.id;
-  var f={lire_ventes:outilVentes,lire_controle_caisse:outilControle,lire_equipe:outilEquipe,lire_stock:outilStock,lire_config:outilConfig,
+  var f={lire_food_cost:outilFoodCost,lire_ventes:outilVentes,lire_controle_caisse:outilControle,lire_equipe:outilEquipe,lire_stock:outilStock,lire_config:outilConfig,
     proposer_modification_donnees:function(x){return proposerDonnees(x,id)},
     lire_site:function(x){ return appelRelais('/site/lire',x).then(compacter); },
     proposer_modification_site:function(x){return proposerSite(x,id)}}[bloc.name];
   var p=f?f(a):Promise.resolve('Outil inconnu');
-  return p.then(function(res){ return {type:'tool_result',tool_use_id:id,content:String(res)}; },function(er){ return {type:'tool_result',tool_use_id:id,content:'Erreur : '+(er.message||er.code),is_error:true}; });
+  return p.then(function(res){ var t=String(res); if(t.length>40000) t=t.slice(0,40000)+'\n[… résultat raccourci : demande une période plus courte si besoin]'; return {type:'tool_result',tool_use_id:id,content:t}; },function(er){ return {type:'tool_result',tool_use_id:id,content:'Erreur : '+(er.message||er.code),is_error:true}; });
 }
 function bulle(role,html){ var d=document.createElement('div'); d.className=role==='user'?'ass-me':'ass-ai'; d.innerHTML=html; $('assMsgs').appendChild(d); $('assMsgs').scrollTop=1e9; return d; }
 function mdLeger(t){ return esc(t).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'); }
@@ -1770,11 +1792,14 @@ function envoyerAss(texte){
       var textes=rep.content.filter(function(c){return c.type==='text'}).map(function(c){return c.text}).join('\n');
       if(textes){ att.innerHTML=mdLeger(textes); att=null; }
       var outils=rep.content.filter(function(c){return c.type==='tool_use'});
-      if(rep.stop_reason==='tool_use' && outils.length && ++tours<10){
-        if(!att) att=bulle('ai','<span class="note">…</span>');
+      if(rep.stop_reason==='tool_use' && outils.length){
+        if(++tours>=14){ var f=bulle('ai','<span class="err">J’ai dû m’arrêter : la question demandait trop de lectures d’affilée. Pose-la sur une période plus courte, ou découpe-la.</span>'); if(att) att.remove(); return; }
+        if(!att) att=bulle('ai','<span class="note">Je continue…</span>');
         return Promise.all(outils.map(executerOutil)).then(function(res){ ASS.conv.push({role:'user',content:res}); return tour(); });
       }
-      if(att) att.remove();
+      if(rep.stop_reason==='pause_turn' && ++tours<14){ if(!att) att=bulle('ai','<span class="note">Je continue…</span>'); return tour(); }
+      if(rep.stop_reason==='max_tokens'){ ASS.conv.push({role:'user',content:'Ta réponse a été coupée. Donne directement la réponse finale, en résumé.'}); if(++tours<14){ if(!att) att=bulle('ai','<span class="note">Je résume…</span>'); return tour(); } }
+      if(att){ if(!textes) att.innerHTML='<span class="err">Je n’ai pas réussi à formuler de réponse. Reformule ta question ou clique sur Nouvelle discussion.</span>'; else att.remove(); }
     });
   }
   tour().catch(function(er){ if(att) att.innerHTML='<span class="err">'+esc(er.message)+'</span>'; else bulle('ai','<span class="err">'+esc(er.message)+'</span>'); })
@@ -2540,18 +2565,20 @@ function rendreResultat(){
     db.collection('evenements').where('jour','>=',du).where('jour','<=',au).get(),
     db.collection('factures').get(),
     pointagesFusion(du,au),
-    db.collection('config').doc('equipe_prive').get()
+    db.collection('config').doc('equipe_prive').get(),
+    chargerDepenses(mois).catch(function(){ return []; })
   ]).then(function(r){
+    rendreDepenses(); var divers=DEP.liste.reduce(function(t,x){ return t+x.montant; },0);
     var R=analyser(r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'})), caTTC=R.ca, caHT=caTTC/(1+tva/100), joursV=Object.keys(R.jours).length;
     var achats=0, tvaRec=0; r[1].docs.forEach(function(d){ var f=d.data(); if((f.statut==='validee'||f.statut==='a_verifier')&&String(f.mois||String(f.date||f.jour||'').slice(0,7))===mois){ achats+=Math.round(parseFloat(f.totalHT||0)*100); tvaRec+=Math.round(parseFloat(f.totalTVA||0)*100); } });
     var pv=r[3].exists?(r[3].data().membres||{}):{}, pts=r[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}), parMJ={}, refs={};
     pts.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
     pts.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
     var perso=0; Object.keys(parMJ).forEach(function(k){ var m=k.split('|')[0], x=intervalles(parMJ[k],k.split('|')[1]<jour()); perso+=x.min/60*((pv[m]||{}).coutHoraire||0); });
-    var fixes=FIN.charges.reduce(function(s,c){return s+(c.montant||0)},0), res=caHT-achats-perso-fixes, tauxMarge=caHT?(caHT-achats)/caHT:0;
-    var seuilMois=tauxMarge>0?(perso+fixes)/tauxMarge:null, jOuv=joursV||22;
+    var fixes=FIN.charges.reduce(function(s,c){return s+(c.montant||0)},0), res=caHT-achats-perso-fixes-divers, tauxMarge=caHT?(caHT-achats)/caHT:0;
+    var seuilMois=tauxMarge>0?(perso+fixes+divers)/tauxMarge:null, jOuv=joursV||22;
     function l(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
-    $('fiResultat').innerHTML=l('Chiffre d’affaires HT ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)',eur(caHT))+l('− Achats (factures HT)',eur(achats))+l('− Personnel (pointages × coûts horaires)',eur(perso))+l('− Charges fixes',eur(fixes))+
+    $('fiResultat').innerHTML=l('Chiffre d’affaires HT ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)',eur(caHT))+l('− Achats (factures HT)',eur(achats))+l('− Personnel (pointages × coûts horaires)',eur(perso))+l('− Charges fixes',eur(fixes))+l('− Dépenses diverses',eur(divers))+
       l('= Résultat estimé','<span style="color:'+(res>=0?'var(--ok)':'var(--danger)')+'">'+(res>=0?'+':'')+eur(res)+'</span>','font-weight:800')+
       l('Seuil de rentabilité',seuilMois!=null?'≈ '+eur(seuilMois/jOuv*(1+tva/100))+' de CA TTC par jour':'—')+
       '<p class="note">Estimation de gestion : les achats ne comptent que les factures enregistrées, et le personnel les heures pointées. Ton comptable reste la référence.</p>';
@@ -2601,6 +2628,42 @@ document.addEventListener('click',function(e){
 });
 
 document.addEventListener('click',function(e){ var b=e.target.closest('#jPrem,#jDer'); if(!b) return; var j=$('dJournal'); if(!j) return; j.scrollTo({top:b.id==='jPrem'?j.scrollHeight:0,behavior:'smooth'}); });
+/* ---------- DÉPENSES DIVERSES (notées depuis le téléphone, page depense.html) ---------- */
+var DEP={liste:[],cats:['Courses magasin','Emballages','Entretien','Petit matériel','Carburant','Parking','Autre']};
+function chargerDepenses(mois){
+  return Promise.all([db.collection('depenses').where('mois','==',mois).get(),db.collection('config').doc('depenses').get()]).then(function(r){
+    DEP.liste=r[0].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return b.tsClient-a.tsClient});
+    var c=r[1].exists&&r[1].data().categories; if(Array.isArray(c)&&c.length) DEP.cats=c;
+    return DEP.liste;
+  });
+}
+function rendreDepenses(){
+  var el=$('fiDepenses'); if(!el) return;
+  var parCat={}, total=0, aRemb=0;
+  DEP.liste.forEach(function(x){ parCat[x.categorie]=(parCat[x.categorie]||0)+x.montant; total+=x.montant; if(x.aRembourser&&!x.rembourse) aRemb+=x.montant; });
+  var url=location.href.replace(/[^\/]*([?#].*)?$/,'')+'depense.html';
+  el.innerHTML=(DEP.liste.length?Object.keys(parCat).sort(function(a,b){return parCat[b]-parCat[a]}).map(function(k){ return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(parCat[k])+'</b></div>'; }).join('')+
+      '<div class="row" style="font-weight:800"><span class="l">Total du mois</span><b class="num">'+eur(total)+'</b></div>'+
+      (aRemb?'<div class="row"><span class="l">À te rembourser (payé avec ton argent perso)</span><b class="num" style="color:var(--warn)">'+eur(aRemb)+'</b></div>':'')+
+      '<details style="margin-top:10px"><summary class="note" style="cursor:pointer">Détail des '+DEP.liste.length+' dépense(s)</summary><div class="scroll"><table class="table"><tr><th>Jour</th><th>Catégorie</th><th>Montant</th><th>Payé avec</th><th>Note</th><th></th></tr>'+
+      DEP.liste.map(function(x){ return '<tr><td>'+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' '+esc(x.h||'')+'</td><td>'+esc(x.categorie)+'</td><td class="num">'+eur(x.montant)+'</td><td>'+esc(x.paiement||'')+(x.aRembourser?(x.rembourse?' <span class="tag carte">remboursé</span>':' <span class="tag tir">à rembourser</span>'):'')+'</td><td>'+esc(x.note||'')+'</td><td>'+
+        (x.photo?'<button class="btn small sec" data-depvoir="'+x.__id+'">Ticket</button> ':'')+(x.aRembourser&&!x.rembourse?'<button class="btn small sec" data-deprem="'+x.__id+'">Remboursé</button> ':'')+'<button class="btn small danger" data-depsupp="'+x.__id+'">✕</button></td></tr>'; }).join('')+'</table></div></details>'
+      :'<div class="empty">Aucune dépense notée ce mois-ci.</div>')+
+    '<p class="note" style="margin-top:12px">Pour noter une dépense depuis ton téléphone : ouvre <a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url)+'</a> puis « Ajouter à l’écran d’accueil ». Les dépenses payées avec l’argent du tiroir passent par les sorties d’argent de la caisse, pas ici.</p>'+
+    '<div class="inline" style="margin-top:6px"><button class="btn small sec" id="depExport">Exporter le mois</button><button class="btn small sec" id="depCats">Modifier les catégories</button></div>';
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-depvoir],[data-deprem],[data-depsupp],#depExport,#depCats'); if(!b) return;
+  if(b.hasAttribute('data-depvoir')){ db.collection('depenses_img').doc(b.getAttribute('data-depvoir')).get().then(function(s){ if(!s.exists){ toast('Photo introuvable'); return; } var w=window.open(''); if(w) w.document.write('<img src="data:'+s.data().media+';base64,'+s.data().data+'" style="max-width:100%">'); }); return; }
+  if(b.hasAttribute('data-deprem')){ db.collection('depenses').doc(b.getAttribute('data-deprem')).update({rembourse:jour()}).then(function(){ toast('Marquée remboursée'); rendreResultat(); }); return; }
+  if(b.hasAttribute('data-depsupp')){ if(!confirm('Supprimer cette dépense ?')) return; var id=b.getAttribute('data-depsupp'); Promise.all([db.collection('depenses').doc(id).delete(),db.collection('depenses_img').doc(id).delete().catch(function(){})]).then(function(){ toast('Supprimée'); rendreResultat(); }); return; }
+  if(b.id==='depCats'){ var t=prompt('Catégories, séparées par des virgules',DEP.cats.join(', ')); if(t==null) return; var l=t.split(',').map(function(x){return x.trim()}).filter(Boolean); if(!l.length) return;
+    db.collection('config').doc('depenses').set({categories:l,maj:Date.now()}).then(function(){ DEP.cats=l; toast('Catégories enregistrées'); }); return; }
+  if(b.id==='depExport'){ chargerXlsx().then(function(){ var m=$('fiMois').value||jour().slice(0,7);
+    var rows=DEP.liste.map(function(x){ return {Jour:x.jour,Heure:x.h||'',Catégorie:x.categorie,'Montant €':x.montant/100,'Payé avec':x.paiement||'','À rembourser':x.aRembourser?(x.rembourse?'remboursé le '+x.rembourse:'oui'):'',Note:x.note||'',Ticket:x.photo?'oui':''}; });
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[{Info:'Aucune dépense'}]),'Dépenses'); XLSX.writeFile(wb,'le-double-depenses-'+m+'.xlsx'); }).catch(function(er){ toast(er.message); }); }
+});
+
 /* ---------- CARTE ---------- */
 var CARTE_DEFAUT={
   formules:[{id:'menu_double_hamburger',nom:'Menu Double Hamburger',sous:'Frites + boisson comprises',produit:'hamburger',taille:'double',prix:550,actif:true}],
