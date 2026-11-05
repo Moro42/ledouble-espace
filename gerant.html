@@ -89,6 +89,10 @@ details summary{padding:4px 0}
 @media (max-width:520px){.st-line{grid-template-columns:1fr 150px 40px!important}}
 .st-line.doute{background:#FBEBD3;border-radius:10px;padding:8px}
 .nouveau{font-size:12px;font-weight:700;background:var(--sel);border-radius:999px;padding:2px 8px}
+.inv-ligne{display:grid;gap:6px;padding:12px 0;border-bottom:1px solid var(--surface2)}
+.inv-ligne:last-child{border-bottom:0}
+.inv-champs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.inv-champs label{display:grid;gap:4px;font-size:14px;font-weight:700;color:var(--ink-soft)}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;display:none}
 .toast.on{display:block}
 @media (max-width:520px){.cline{grid-template-columns:62px 1fr 84px}.step{grid-template-columns:52px 1fr 52px}}
@@ -506,9 +510,9 @@ function stockDe(id){
   mvtsActifs().forEach(function(m){
     (m.lignes||[]).forEach(function(l){
       if(l.produit!==id) return;
-      if(m.type==='inventaire') q=l.qte;
+      if(m.type==='inventaire'){ if(l.qte!=null) q=l.qte; }
       else if(m.type==='reception') q=(q||0)+l.qte;
-      else if(m.type==='perte'||m.type==='consommation') q=(q||0)-l.qte;
+      else if((m.type==='perte'&&m.source!=='comptoir')||m.type==='consommation') q=(q||0)-l.qte;
     });
   });
   return q;
@@ -545,13 +549,16 @@ function saisieLignes(type,fourChoisi){
     if(type!=='inventaire'){
       h+='<p class="sub">Fournisseur</p><div class="chips">'+STOCKCFG.fournisseurs.map(function(f){ return '<button class="chip'+(four===f.id?' on':'')+'" data-four="'+f.id+'">'+esc(f.nom)+'</button>'; }).join('')+'<button class="chip'+(four==='autre'?' on':'')+'" data-four="autre">Autre</button></div>';
       if(!four){ $('vue').innerHTML=h+'<div class="card" style="margin-top:12px"><p class="sub" style="margin:0">Choisis d’abord le fournisseur.</p></div>'; return; }
-    } else h+='<p class="sub">Compte ce qu’il y a réellement dans la réserve. Laisse vide un produit non compté.</p>';
+    } else h+='<p class="sub">Compte ce qu’il y a réellement, <b>dans la réserve</b> et <b>au comptoir</b> (ce qui a déjà été sorti). Laisse vide un produit non compté.</p>';
     var lignes=produitsVisibles();
     h+='<div class="card" style="margin-top:12px">'+(lignes.length?lignes.map(function(p){
       var q=stockDe(p.id), conseil='';
       if(type==='commande'){ var cible=p.cible!=null?p.cible:(p.seuil!=null?p.seuil*2:null); if(cible!=null&&q!=null) conseil=Math.max(0,Math.ceil(cible-q)); }
       var val=type==='inventaire'?'':(type==='commande'?(conseil===''?0:conseil):0);
       var cd=condDe(p);
+      if(type==='inventaire') return '<div class="inv-ligne"><b>'+esc(p.nom)+'</b><span class="sub">'+esc(cd?'en '+pluriel(cd.nom,2)+' ('+nb(cd.contenu)+' '+(p.unite||'')+')':'en '+(p.unite||'unités'))+'</span>'+
+        '<div class="inv-champs"><label>Réserve<div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="" placeholder="—"><button data-p="'+p.id+'">+</button></div></label>'+
+        '<label>Comptoir<div class="step"><button data-m="c_'+p.id+'">−</button><input inputmode="decimal" data-q="c_'+p.id+'" data-comptoir="'+p.id+'" value="" placeholder="—"><button data-p="c_'+p.id+'">+</button></div></label></div></div>';
       return '<div class="cline st-line"><span><b>'+esc(p.nom)+'</b><br><span class="sub">stock : '+(q==null?'?':esc(fmtCond(q,p)))+(conseil!==''?' · conseillé : '+conseil:'')+'</span></span><div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="'+val+'" placeholder="—"><button data-p="'+p.id+'">+</button></div><span class="t">'+esc(cd?pluriel(cd.nom,2):(p.unite||''))+'</span></div>';
     }).join(''):'<p class="sub" style="margin:0">Aucun produit pour ce fournisseur.</p>')+'</div>'+
     '<label class="f" style="margin-top:12px">Remarque (facultatif)<input class="sel" id="stNote" maxlength="200" placeholder="'+(type==='reception'?'ex. 2 baguettes abîmées, livraison incomplète…':'')+'"></label>'+
@@ -567,9 +574,15 @@ function saisieLignes(type,fourChoisi){
     if(b.id==='stOk'){
       var lignes=[];
       Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(inp){
-        var v=String(inp.value).trim(); if(v==='') return; var n=parseFloat(v.replace(',','.')); if(isNaN(n)) return;
+        if(inp.hasAttribute('data-comptoir')) return;
+        var v=String(inp.value).trim(), cIn=document.querySelector('[data-comptoir="'+inp.getAttribute('data-q')+'"]'), vc=cIn?String(cIn.value).trim():'';
+        var reserveVide=(v===''&&type==='inventaire'&&vc!=='');
+        if(reserveVide) v='0';
+        if(v==='') return; var n=parseFloat(v.replace(',','.')); if(isNaN(n)) return;
         var pp=produitId(inp.getAttribute('data-q')); n=Math.round(enBase(n,pp,'cond')*1000)/1000;
-        if(type==='inventaire' || n>0) lignes.push({produit:inp.getAttribute('data-q'),qte:n});
+        var ligne={produit:inp.getAttribute('data-q'),qte:reserveVide?null:n};
+        if(type==='inventaire'&&vc!==''){ var nc=parseFloat(vc.replace(',','.')); if(!isNaN(nc)) ligne.comptoir=Math.round(enBase(nc,pp,'cond')*1000)/1000; }
+        if(type==='inventaire' || n>0) lignes.push(ligne);
       });
       if(!lignes.length){ alert('Aucune quantité saisie.'); return; }
       var note=$('stNote').value.trim();
@@ -605,12 +618,13 @@ document.addEventListener('change',function(e){
 /* ---------- pertes ---------- */
 function vuePertes(){
   chargerStock(function(){
-    var produit=null, motif='Invendu', unite='cond';
+    var produit=null, motif='Invendu', unite='cond', source='comptoir';
     var MOTIFS=['Invendu','Périmé','Casse','Erreur de préparation','Autre'];
     function render(){
       $('vue').innerHTML='<button class="back" data-go="stock">‹ Retour</button><h2>Déclarer une perte</h2>'+
         '<p class="sub">Produit</p><div class="chips">'+STOCKCFG.produits.map(function(p){ return '<button class="chip'+(produit===p.id?' on':'')+'" data-prod="'+p.id+'">'+esc(p.nom)+'</button>'; }).join('')+'</div>'+
         (STOCKCFG.produits.length?'':'<div class="card"><p class="sub" style="margin:0">La liste des produits n’a pas encore été créée par le propriétaire.</p></div>')+
+        '<p class="sub" style="margin-top:14px">D’où vient la perte ?</p><div class="chips"><button class="chip'+(source==='comptoir'?' on':'')+'" data-src="comptoir">Du comptoir (déjà sorti, pas réutilisable)</button><button class="chip'+(source==='reserve'?' on':'')+'" data-src="reserve">De la réserve</button></div>'+
         '<p class="sub" style="margin-top:14px">Quantité</p>'+(produit?choixUnite(produitId(produit),unite):'')+'<div class="step" style="max-width:320px;margin-top:8px"><button data-m="q">−</button><input inputmode="decimal" data-q="q" value="1"><button data-p="q">+</button></div>'+
         '<p class="sub" style="margin-top:14px">Raison</p><div class="chips">'+MOTIFS.map(function(m){ return '<button class="chip'+(motif===m?' on':'')+'" data-motif="'+m+'">'+m+'</button>'; }).join('')+'</div>'+
         '<label class="f" style="margin-top:12px">Précision (facultatif)<input class="sel" id="peNote" maxlength="200"></label>'+
@@ -621,6 +635,7 @@ function vuePertes(){
       var b=ev.target.closest('button'); if(!b) return;
       if(b.hasAttribute('data-prod')){ var q=document.querySelector('[data-q="q"]').value; produit=b.getAttribute('data-prod'); unite='cond'; render(); document.querySelector('[data-q="q"]').value=q; return; }
       if(b.hasAttribute('data-unite')){ var qu=document.querySelector('[data-q="q"]').value; unite=b.getAttribute('data-unite'); render(); document.querySelector('[data-q="q"]').value=qu; return; }
+      if(b.hasAttribute('data-src')){ var qs=document.querySelector('[data-q="q"]').value; source=b.getAttribute('data-src'); render(); document.querySelector('[data-q="q"]').value=qs; return; }
       if(b.hasAttribute('data-motif')){ var q2=document.querySelector('[data-q="q"]').value; motif=b.getAttribute('data-motif'); render(); document.querySelector('[data-q="q"]').value=q2; return; }
       var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
       if(m||p){ var inp=document.querySelector('[data-q="q"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
@@ -628,7 +643,7 @@ function vuePertes(){
         var n2=enBase(parseFloat(String(document.querySelector('[data-q="q"]').value).replace(',','.')),produitId(produit),unite); n2=Math.round(n2*1000)/1000;
         if(!(n2>0)){ alert('Quantité invalide.'); return; }
         b.disabled=true;
-        db.collection('stock_mvts').add({type:'perte',lignes:[{produit:produit,qte:n2}],motif:motif,note:$('peNote').value.trim(),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+        db.collection('stock_mvts').add({type:'perte',source:source,lignes:[{produit:produit,qte:n2}],motif:motif,note:$('peNote').value.trim(),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
           .then(function(){ toast('Perte enregistrée'); vueStock(); })
           .catch(function(e){ b.disabled=false; alert('Envoi impossible ('+e.code+')'); });
       }

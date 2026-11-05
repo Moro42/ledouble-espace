@@ -249,6 +249,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       </div>
       <div class="grid two" style="margin-top:12px">
         <div class="card"><h3 style="margin-top:0">Boissons vendues aujourd’hui</h3><div id="dBoissons"></div></div>
+        <div class="card"><h3 style="margin-top:0">Food cost du jour</h3><div id="dFoodCost"><div class="empty">Chargement…</div></div></div>
       </div>
       <div class="card hidden" id="dNotes" style="margin-top:12px;border-left:5px solid var(--accent)"></div>
       <div class="card alert hidden" id="dAlertes" style="margin-top:12px"></div>
@@ -335,9 +336,10 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h3>Stock actuel</h3><div class="card" id="skEtat"><div class="empty">Chargement…</div></div>
       <h3>Pertes</h3><div class="card" id="skPertes"></div>
       <h3>Mouvements des 30 derniers jours</h3><div class="card" id="skMvts"></div>
-      <h3>Sorties du jour : utilisé / attendu</h3>
+      <h3>Sorties du jour : sorti · consommé · comptoir</h3>
       <div class="inline" style="margin-bottom:10px"><label class="note">Jour <input class="in" type="date" id="skSortJour" style="width:auto"></label><button class="btn small dark" id="skSortVoir">Afficher</button></div>
       <div class="card" id="skSorties"><div class="empty">Chargement…</div></div>
+      <h3>Bilans d’inventaire : pertes et food cost réel</h3><div id="skBilans"><div class="empty">Chargement…</div></div>
       <h3>Règles de consommation</h3><div class="card form" id="skRegles"></div>
       <div id="skCmds" class="hidden"></div>
       <div id="skConfig"></div>
@@ -561,7 +563,7 @@ function demarrer(){
   rangerMisesAJour();
   chargerNoms();
   chargerRegC();
-  setTimeout(function(){ chargerPrix(); },800);
+  setTimeout(function(){ chargerPrix().then(function(){ chargerScDirect(); }); },800);
   chargerAssistant();
   setTimeout(function(){ try{ chargerPropositionsPastille(); }catch(e){} },1500);
   suivreJour();
@@ -613,6 +615,7 @@ function rendreDirect(evs,nouveaux){
   function hq(q){ return Math.floor(q/4)+':'+String((q%4)*15).padStart(2,'0'); }
   $('dPic').innerHTML=hv?'Heure la plus chargée : <b>'+hp+'h–'+(hp+1)+'h, '+hv+' client'+(hv>1?'s':'')+'</b> · pic sur 15 min : <b>'+qv+' client'+(qv>1?'s':'')+'</b> ('+hq(qp)+'–'+hq(qp+1)+')':'';
   dernierEvs=evs;
+  try{ majFoodCostDirect(evs); }catch(e){}
   try{ clearTimeout(window._mpT); window._mpT=setTimeout(function(){ if(BASE.pret&&!BASE.erreur) synchroCopies(); else rafraichirBlocsDuJour(); },150); }catch(e){}
   function m(t,n,d){return '<div style="margin-bottom:14px"><div class="row" style="border:0;padding:0"><span class="l">'+t+'</span><b class="num">'+pct(n,d)+'</b></div><div class="meter"><i style="width:'+(d?Math.round(n*100/d):0)+'%"></i></div></div>'}
   $('dUpsell').innerHTML=m('Sandwichs avec frites',r.avecFrites,r.lignesSand)+m('Sandwichs avec boisson',r.avecBoisson,r.lignesSand)+
@@ -1349,7 +1352,7 @@ function initStockSuite(){
     if(!$('skSortJour').value) $('skSortJour').value=jour(); rendreRegles(); rendreSortiesJour();
   }).catch(function(e){ $('skEtat').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
 }
-function stockP(id){ var q=null; mvtsSansAnnules(SMV).forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==id) return; if(m.type==='inventaire') q=l.qte; else if(m.type==='reception') q=(q||0)+l.qte; else if(m.type==='perte'||m.type==='consommation') q=(q||0)-l.qte; }); }); return q; }
+function stockP(id){ var q=null; mvtsSansAnnules(SMV).forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==id) return; if(m.type==='inventaire'){ if(l.qte!=null) q=l.qte; } else if(m.type==='reception') q=(q||0)+l.qte; else if((m.type==='perte'&&m.source!=='comptoir')||m.type==='consommation') q=(q||0)-l.qte; }); }); return q; }
 function prodP(id){ var r=null; SC.produits.forEach(function(p){ if(p.id===id) r=p; }); return r; }
 function fourP(id){ var r=null; SC.fournisseurs.forEach(function(f){ if(f.id===id) r=f; }); return r; }
 function pluP(mot,n){ return n>1&&!/[sx]$/i.test(mot)?mot+'s':mot; }
@@ -1438,39 +1441,6 @@ function attenduDesVentes(evs,R){
 }
 function mvtsSansAnnules(l){ var ann={}; l.forEach(function(m){ if(m.type==='annule_mvt') ann[m.ref]=1; }); return l.filter(function(m){ return m.type!=='annule_mvt'&&!ann[m.__id]; }); }
 function utiliseDuJour(j){ var u={}; mvtsSansAnnules(SMV).forEach(function(m){ if(m.type==='consommation'&&m.jour===j) (m.lignes||[]).forEach(function(l){ u[l.produit]=(u[l.produit]||0)+l.qte; }); }); return u; }
-function rendreSortiesJour(){
-  var el=$('skSorties'); if(!el) return;
-  var j=$('skSortJour').value||jour(), R=reglesConso();
-  var d30=jour(new Date(new Date(j+'T12:00:00').getTime()-29*864e5));
-  db.collection('evenements').where('jour','>=',d30).where('jour','<=',j).get().then(function(s){
-    var evs=s.docs.map(function(d){return d.data()});
-    var duJour=evs.filter(function(x){return x.jour===j}), att=attenduDesVentes(duJour,R), u=utiliseDuJour(j);
-    // moyennes apprises sur 30 jours (frites par portion, crudités par sandwich)
-    var appr={frites:{u:0,n:0},crudites:{u:0,n:0}}, parJour={};
-    evs.forEach(function(x){ (parJour[x.jour]=parJour[x.jour]||[]).push(x); });
-    Object.keys(parJour).forEach(function(jj){ var aj=attenduDesVentes(parJour[jj],R), uj=utiliseDuJour(jj);
-      ['frites','crudites'].forEach(function(k){ var pid=produitRegle(k,R); if(pid&&uj[pid]){ appr[k].u+=uj[pid]; appr[k].n+=(k==='frites'?aj.portionsFrites:aj.sandwichs); } }); });
-    var lignes='', valeur=0;
-    ['baguette','steak','mulky','mexicanos','poulet','cheddar','gouda','oeuf','canette'].forEach(function(k){
-      var pid=produitRegle(k,R), p=pid?prodP(pid):null, ut=pid?(u[pid]||0):0, at=att.a[k];
-      if(!pid && !at) return;
-      if(pid&&prixAchat(pid)) valeur+=prixAchat(pid)*ut;
-      var ec=ut-at, pc=at?ec*100/at:0, coul=!pid?'var(--ink-soft)':Math.abs(pc)<=5?'var(--ok)':Math.abs(pc)<=12?'var(--warn)':'var(--danger)';
-      lignes+='<tr><td>'+esc(p?p.nom:NOM_REGLE[k])+(pid?'':' <span class="note">(produit non relié)</span>')+'</td><td class="num">'+(pid?esc(qCond(ut,p)):'—')+'</td><td class="num">'+(p?esc(qCond(at,p)):fmtQ(at))+'</td><td class="num" style="color:'+coul+';font-weight:700">'+(pid&&at?(ec>0?'+':'')+fmtQ(ec)+' · '+(pc>0?'+':'')+Math.round(pc)+' %':'—')+'</td></tr>';
-    });
-    ['frites','crudites'].forEach(function(k){
-      var pid=produitRegle(k,R), p=pid?prodP(pid):null, ut=pid?(u[pid]||0):0, n=k==='frites'?att.portionsFrites:att.sandwichs;
-      if(!pid) return; if(prixAchat(pid)) valeur+=prixAchat(pid)*ut;
-      var moy=appr[k].n?appr[k].u/appr[k].n:null, auj=n?ut/n:null, ec=(moy&&auj)?(auj-moy)*100/moy:null;
-      lignes+='<tr><td>'+esc(p.nom)+' <span class="note">par '+(k==='frites'?'portion':'sandwich')+'</span></td><td class="num">'+(auj!=null?fmtQ(auj,3):'—')+'</td><td class="num">'+(moy!=null?fmtQ(moy,3)+' <span class="note">moy. 30 j</span>':'en apprentissage')+'</td><td class="num" style="font-weight:700;color:'+(ec==null?'var(--ink-soft)':Math.abs(ec)<=8?'var(--ok)':Math.abs(ec)<=15?'var(--warn)':'var(--danger)')+'">'+(ec!=null?(ec>0?'+':'')+Math.round(ec)+' %':'—')+'</td></tr>';
-    });
-    var caJ=0; duJour.forEach(function(x){ if(x.type==='vente') caJ+=x.total; if(x.type==='annulation') caJ-=x.montant||0; });
-    var caHT=caJ/(1+(REGC.tvaVentes||6)/100);
-    el.innerHTML=lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Utilisé</th><th>Attendu d’après les ventes</th><th>Écart</th></tr>'+lignes+'</table></div>'+
-      '<p class="note">'+att.sandwichs+' sandwichs et '+att.portionsFrites+' portions de frites vendus.'+(valeur?' Valeur des sorties : <b>'+eur(valeur)+'</b>'+(caHT>0?' · food cost réel du jour : <b>'+Math.round(valeur*100/caHT)+' %</b>':''):' Les prix d’achat (onglet Finances) permettent d’obtenir le food cost réel.')+'</p>'
-      :'<div class="empty">Aucune sortie ni vente ce jour-là.</div>';
-  }).catch(function(e){ el.innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
-}
 function fmtQ(v,dec){ dec=dec||1; var f=Math.pow(10,dec); return String(Math.round(v*f)/f).replace('.',','); }
 function rendreRegles(){
   var el=$('skRegles'); if(!el) return; var R=reglesConso();
@@ -1491,6 +1461,105 @@ document.addEventListener('click',function(e){
   ref.get().then(function(s){ var c=s.exists?s.data():{produits:[],fournisseurs:[]}; c.regles=r; c.maj=Date.now(); SC.regles=r; return ref.set(c); })
     .then(function(){ toast('Règles enregistrées'); rendreSortiesJour(); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
 });
+
+/* ---------- STOCK INTELLIGENT : réserve, comptoir, pertes à l'inventaire, food cost ---------- */
+/* consommation théorique d'une vente (en unités de base, par produit du stock) */
+function consoVente(x,R,ratios){
+  var out={}, a=attenduDesVentes([x],R);
+  function add(cle,q){ if(!q) return; var pid=produitRegle(cle,R); if(pid) out[pid]=(out[pid]||0)+q; }
+  Object.keys(a.a).forEach(function(k){ add(k,a.a[k]); });
+  if(ratios.frites) add('frites',a.portionsFrites*ratios.frites);
+  if(ratios.crudites) add('crudites',a.sandwichs*ratios.crudites);
+  return out;
+}
+/* moyennes apprises (frites par portion, crudités par sandwich) : inventaires d'abord, sinon sorties sur la période */
+function ratiosAppris(evs,mvts,R){
+  var r={}, ann={}, port=0, sand=0, so={};
+  evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
+  evs.forEach(function(x){ if(x.type==='vente'&&!ann[x.id]){ var a=attenduDesVentes([x],R); port+=a.portionsFrites; sand+=a.sandwichs; } });
+  mvtsSansAnnules(mvts).forEach(function(m){ if(m.type==='consommation') (m.lignes||[]).forEach(function(l){ so[l.produit]=(so[l.produit]||0)+l.qte; }); });
+  var pf=produitRegle('frites',R), pc=produitRegle('crudites',R);
+  if(pf&&port>=20&&so[pf]) r.frites=so[pf]/port;
+  if(pc&&sand>=20&&so[pc]) r.crudites=so[pc]/sand;
+  if(PRIX.appris){ if(!r.frites&&PRIX.appris.frites) r.frites=PRIX.appris.frites; if(!r.crudites&&PRIX.appris.crudites) r.crudites=PRIX.appris.crudites; }
+  return r;
+}
+/* rejoue toute l'histoire dans l'ordre : ventes, sorties, livraisons, pertes, inventaires */
+function chronologieStock(evs,mvts,R,ratios){
+  var ann={}; evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
+  var items=[];
+  evs.forEach(function(x){ if(x.type==='vente'&&!ann[x.id]) items.push({ts:x.tsClient||0,jour:x.jour,t:'vente',x:x}); });
+  mvtsSansAnnules(mvts).forEach(function(m){ if(['consommation','inventaire','reception','perte'].indexOf(m.type)>=0) items.push({ts:m.tsClient||0,jour:m.jour,t:m.type,m:m}); });
+  items.sort(function(a,b){ return a.ts-b.ts; });
+  var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{}};
+  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}}; }
+  items.forEach(function(it){
+    var d=J(it.jour); if(!per.debut) per.debut=it.jour;
+    if(it.t==='vente'){ var c=consoVente(it.x,R,ratios); Object.keys(c).forEach(function(pid){ comptoir[pid]=(comptoir[pid]||0)-c[pid]; d.conso[pid]=(d.conso[pid]||0)+c[pid]; per.conso[pid]=(per.conso[pid]||0)+c[pid]; }); d.ca+=it.x.total; per.ca+=it.x.total; }
+    else (it.m.lignes||[]).forEach(function(l){ var pid=l.produit;
+      if(it.t==='reception') reserve[pid]=(reserve[pid]||0)+l.qte;
+      if(it.t==='perte'){ if(it.m.source==='comptoir') comptoir[pid]=(comptoir[pid]||0)-l.qte; else reserve[pid]=(reserve[pid]||0)-l.qte; per.decl[pid]=(per.decl[pid]||0)+l.qte; d.perdu[pid]=(d.perdu[pid]||0)+l.qte; }
+      if(it.t==='consommation'){ reserve[pid]=(reserve[pid]||0)-l.qte; comptoir[pid]=(comptoir[pid]||0)+l.qte; d.sorti[pid]=(d.sorti[pid]||0)+l.qte; }
+    });
+    if(it.t==='inventaire'){
+      var b={jour:it.jour,h:it.m.h||'',debut:per.debut,ca:per.ca,conso:per.conso,decl:per.decl,lignes:[]};
+      (it.m.lignes||[]).forEach(function(l){ var pid=l.produit, cR=l.qte!=null?l.qte:null, cC=l.comptoir!=null?l.comptoir:null;
+        var theo=(cR!=null?(reserve[pid]||0):0)+(cC!=null?(comptoir[pid]||0):0), compte=(cR!=null?cR:0)+(cC!=null?cC:0);
+        if(dejaInv[pid]&&(cR!=null||cC!=null)) b.lignes.push({pid:pid,theo:theo,compte:compte,ecart:theo-compte});
+        dejaInv[pid]=1; if(cR!=null) reserve[pid]=cR; if(cC!=null) comptoir[pid]=cC; });
+      bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{}};
+    }
+    var cf=d.comptoirFin; Object.keys(comptoir).forEach(function(pid){ cf[pid]=comptoir[pid]; });
+  });
+  return {reserve:reserve,comptoir:comptoir,jours:jours,bilans:bilans,periode:per};
+}
+function valeurConso(map){ var v=0, manque=0; Object.keys(map).forEach(function(pid){ var p=prixAchat(pid); if(p!=null) v+=p*map[pid]; else if(map[pid]) manque++; }); return {v:v,manque:manque}; }
+function rendreSortiesJour(){
+  var el=$('skSorties'); if(!el) return;
+  var j=$('skSortJour').value||jour(), R=reglesConso(), d60=jour(new Date(new Date(j+'T12:00:00').getTime()-59*864e5));
+  var d60b=jour(new Date(Math.min(new Date(j+'T12:00:00').getTime(),Date.now())-59*864e5));
+  Promise.all([db.collection('evenements').where('jour','>=',d60b).get(),db.collection('stock_mvts').where('jour','>=',d60b).get(),PRIX_CHARGE?null:chargerPrix()]).then(function(r){
+    var evs=r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}), mvts=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o});
+    var ratios=ratiosAppris(evs.filter(function(x){return x.jour>jour(new Date(new Date(j+'T12:00:00').getTime()-30*864e5))}),mvts,R);
+    // les moyennes apprises servent aussi au food cost en direct
+    if(ratios.frites||ratios.crudites){ PRIX.appris={frites:ratios.frites||null,crudites:ratios.crudites||null,date:jour()}; db.collection('config').doc('prix').set(PRIX).catch(function(){}); }
+    var C=chronologieStock(evs,mvts,R,ratios), d=C.jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}};
+    var ids={}; Object.keys(d.sorti).concat(Object.keys(d.conso),Object.keys(d.perdu),Object.keys(d.comptoirFin)).forEach(function(k){ ids[k]=1; });
+    var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.comptoirFin[pid]||0;
+      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p)):'—')+'</td><td class="num" style="'+(cf<-0.01?'color:var(--warn);font-weight:700':'')+'">'+esc(qCond(Math.round(cf*100)/100,p))+(cf<-0.01?' <span class="note">(plus vendu que sorti : sortie non notée ?)</span>':'')+'</td></tr>'; }).join('');
+    var vc=valeurConso(d.conso), caHT=d.ca/(1+(REGC.tvaVentes||6)/100);
+    el.innerHTML=(lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Sorti de la réserve</th><th>Consommé par les ventes</th><th>Jeté (pertes déclarées)</th><th>Au comptoir en fin de journée</th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune sortie ni vente ce jour-là.</div>')+
+      '<p class="note">Ce qui est sorti et pas encore vendu reste au comptoir et passe au lendemain : ce n’est pas une perte. Ce qui n’est pas réutilisable est déclaré en perte par le gérant et sort du comptoir. Les écarts non expliqués apparaissent à l’inventaire.'+(caHT>0&&vc.v?' Food cost théorique du jour : <b>'+Math.round(vc.v*100/caHT)+' %</b> ('+eur(vc.v)+' de matière pour '+eur(caHT)+' de CA HT'+(vc.manque?', certains prix manquent':'')+').':'')+'</p>';
+    rendreBilans(C);
+  }).catch(function(e){ el.innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
+}
+function rendreBilans(C){
+  var el=$('skBilans'); if(!el) return;
+  var b=C.bilans.filter(function(x){ return x.lignes.length; }).reverse();
+  el.innerHTML=b.length?b.slice(0,8).map(function(x){
+    var vp=0, lignes=x.lignes.map(function(l){ var p=prodP(l.pid)||{nom:'?'}, pr=prixAchat(l.pid), v=pr!=null?l.ecart*pr:null; if(v!=null) vp+=v;
+      return '<div class="row"><span class="l">'+esc(p.nom)+' <span class="note">attendu '+esc(qCond(Math.round(l.theo*100)/100,p))+' · compté '+esc(qCond(l.compte,p))+'</span></span><b class="num" style="color:'+(l.ecart>0.01?'var(--danger)':'var(--ok)')+'">'+(l.ecart>0.01?'−':l.ecart<-0.01?'+':'')+esc(qCond(Math.round(Math.abs(l.ecart)*100)/100,p))+(v!=null&&Math.abs(v)>=1?' · '+eur(Math.abs(v)):'')+'</b></div>'; }).join('');
+    var caHT=x.ca/(1+(REGC.tvaVentes||6)/100), vt=valeurConso(x.conso).v, vd=valeurConso(x.decl||{}).v, fcT=caHT?vt*100/caHT:null, fcR=caHT?(vt+vd+Math.max(0,vp))*100/caHT:null;
+    return '<div class="card" style="margin-bottom:10px"><b>Inventaire du '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' '+esc(x.h)+'</b> <span class="note">· période depuis le '+esc(String(x.debut||'').slice(8,10)+'/'+String(x.debut||'').slice(5,7))+'</span>'+lignes+
+      '<p class="note" style="margin:8px 0 0">Pertes déclarées par le gérant : <b>'+eur(vd)+'</b> · écart non expliqué à l’inventaire : <b style="color:'+(vp>0?'var(--danger)':'var(--ok)')+'">'+eur(Math.max(0,vp))+'</b>'+(caHT?' · total '+((vd+Math.max(0,vp))*100/caHT).toFixed(1).replace('.',',')+' % du CA HT':'')+(fcT!=null?' · food cost théorique <b>'+Math.round(fcT)+' %</b> · réel <b>'+Math.round(fcR)+' %</b>':'')+'</p></div>'; }).join('')
+    :'<div class="empty">Pas encore de bilan : il faut au moins deux inventaires (le premier sert de point de départ). Demande au gérant de compter la réserve et le comptoir.</div>';
+}
+/* ---------- food cost du jour, en direct ---------- */
+var SC_DIRECT=null;
+function chargerScDirect(){ db.collection('config').doc('stock').get().then(function(s){ SC_DIRECT=s.exists?s.data():null; if(SC_DIRECT&&(!SC.produits||!SC.produits.length)){ SC=SC_DIRECT; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } majFoodCostDirect(); }).catch(function(){}); }
+var DERNIERS_EVS_JOUR=[];
+function majFoodCostDirect(evs){
+  if(evs) DERNIERS_EVS_JOUR=evs; var el=$('dFoodCost'); if(!el) return;
+  if(!SC_DIRECT||!PRIX_CHARGE){ el.innerHTML='<div class="empty">Chargement…</div>'; return; }
+  var R=reglesConso(), ratios=PRIX.appris||{}, ann={}, conso={}, ca=0;
+  DERNIERS_EVS_JOUR.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
+  DERNIERS_EVS_JOUR.forEach(function(x){ if(x.type!=='vente'||ann[x.id]) return; ca+=x.total; var c=consoVente(x,R,ratios); Object.keys(c).forEach(function(pid){ conso[pid]=(conso[pid]||0)+c[pid]; }); });
+  var vc=valeurConso(conso), caHT=ca/(1+(REGC.tvaVentes||6)/100), fc=caHT&&vc.v?vc.v*100/caHT:null;
+  el.innerHTML=fc!=null?'<div class="big num" style="font-size:42px;font-weight:800;color:'+(fc<33?'var(--ok)':fc<=40?'var(--warn)':'var(--danger)')+'">'+Math.round(fc)+' %</div>'+
+    '<div class="row"><span class="l">Matière consommée par les ventes</span><b class="num">'+eur(vc.v)+'</b></div><div class="row"><span class="l">CA HT du jour</span><b class="num">'+eur(caHT)+'</b></div>'+
+    '<p class="note">Food cost théorique, mis à jour à chaque vente'+(vc.manque?' (certains prix d’achat manquent : voir Finances)':'')+(ratios.frites?'':' · frites pas encore comptées (moyenne en apprentissage)')+'. Le réel se calcule à chaque inventaire (onglet Stock).</p>'
+    :'<div class="empty">'+(ca?'Prix d’achat manquants : complète-les dans Finances.':'Pas encore de vente aujourd’hui.')+'</div>';
+}
 
 /* ---------- NOTES DU GÉRANT (dans « En direct ») ---------- */
 function suivreNotes(){
