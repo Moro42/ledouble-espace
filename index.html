@@ -1491,11 +1491,16 @@ function chronologieStock(evs,mvts,R,ratios){
   evs.forEach(function(x){ if(x.type==='vente'&&!ann[x.id]) items.push({ts:x.tsClient||0,jour:x.jour,t:'vente',x:x}); });
   mvtsSansAnnules(mvts).forEach(function(m){ if(['consommation','inventaire','reception','perte'].indexOf(m.type)>=0) items.push({ts:m.tsClient||0,jour:m.jour,t:m.type,m:m}); });
   items.sort(function(a,b){ return a.ts-b.ts; });
-  var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{}};
-  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}}; }
+  var suivi={};   // produit → instant où son suivi au comptoir commence
+  items.forEach(function(it){ if(it.t==='consommation'||it.t==='inventaire') (it.m.lignes||[]).forEach(function(l){ if(suivi[l.produit]==null) suivi[l.produit]=it.ts; }); });
+  var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{}}, jourCourant=null;
+  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},manque:{},ca:0,comptoirFin:{}}; }
+  /* fin de journée : un comptoir négatif veut dire qu'une sortie n'a pas été notée ; on le signale ce jour-là et on repart de zéro */
+  function cloreJour(j){ if(!j) return; var d=J(j); Object.keys(comptoir).forEach(function(pid){ d.comptoirFin[pid]=comptoir[pid]; if(comptoir[pid]<-0.01){ d.manque[pid]=-comptoir[pid]; reserve[pid]=(reserve[pid]||0)+comptoir[pid]; comptoir[pid]=0; } }); }
   items.forEach(function(it){
+    if(it.jour!==jourCourant){ cloreJour(jourCourant); jourCourant=it.jour; }
     var d=J(it.jour); if(!per.debut) per.debut=it.jour;
-    if(it.t==='vente'){ var c=consoVente(it.x,R,ratios); Object.keys(c).forEach(function(pid){ comptoir[pid]=(comptoir[pid]||0)-c[pid]; d.conso[pid]=(d.conso[pid]||0)+c[pid]; per.conso[pid]=(per.conso[pid]||0)+c[pid]; }); d.ca+=it.x.total; per.ca+=it.x.total; }
+    if(it.t==='vente'){ var c=consoVente(it.x,R,ratios); Object.keys(c).forEach(function(pid){ if(suivi[pid]!=null&&it.ts>=suivi[pid]) comptoir[pid]=(comptoir[pid]||0)-c[pid]; d.conso[pid]=(d.conso[pid]||0)+c[pid]; per.conso[pid]=(per.conso[pid]||0)+c[pid]; }); d.ca+=it.x.total; per.ca+=it.x.total; }
     else (it.m.lignes||[]).forEach(function(l){ var pid=l.produit;
       if(it.t==='reception') reserve[pid]=(reserve[pid]||0)+l.qte;
       if(it.t==='perte'){ if(it.m.source==='comptoir') comptoir[pid]=(comptoir[pid]||0)-l.qte; else reserve[pid]=(reserve[pid]||0)-l.qte; per.decl[pid]=(per.decl[pid]||0)+l.qte; d.perdu[pid]=(d.perdu[pid]||0)+l.qte; }
@@ -1509,9 +1514,9 @@ function chronologieStock(evs,mvts,R,ratios){
         dejaInv[pid]=1; if(cR!=null) reserve[pid]=cR; if(cC!=null) comptoir[pid]=cC; });
       bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{}};
     }
-    var cf=d.comptoirFin; Object.keys(comptoir).forEach(function(pid){ cf[pid]=comptoir[pid]; });
   });
-  return {reserve:reserve,comptoir:comptoir,jours:jours,bilans:bilans,periode:per};
+  cloreJour(jourCourant);
+  return {reserve:reserve,comptoir:comptoir,jours:jours,bilans:bilans,periode:per,suivi:suivi};
 }
 function valeurConso(map){ var v=0, manque=0; Object.keys(map).forEach(function(pid){ var p=prixAchat(pid); if(p!=null) v+=p*map[pid]; else if(map[pid]) manque++; }); return {v:v,manque:manque}; }
 function rendreSortiesJour(){
@@ -1525,8 +1530,8 @@ function rendreSortiesJour(){
     if(ratios.frites||ratios.crudites){ PRIX.appris={frites:ratios.frites||null,crudites:ratios.crudites||null,date:jour()}; db.collection('config').doc('prix').set(PRIX).catch(function(){}); }
     var C=chronologieStock(evs,mvts,R,ratios), d=C.jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}};
     var ids={}; Object.keys(d.sorti).concat(Object.keys(d.conso),Object.keys(d.perdu),Object.keys(d.comptoirFin)).forEach(function(k){ ids[k]=1; });
-    var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.comptoirFin[pid]||0;
-      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p)):'—')+'</td><td class="num" style="'+(cf<-0.01?'color:var(--warn);font-weight:700':'')+'">'+esc(qCond(Math.round(cf*100)/100,p))+(cf<-0.01?' <span class="note">(plus vendu que sorti : sortie non notée ?)</span>':'')+'</td></tr>'; }).join('');
+    var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.comptoirFin[pid]||0, suivi=C.suivi[pid]!=null&&C.suivi[pid]<=new Date(j+'T23:59:59').getTime(), mq=d.manque[pid]||0;
+      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p)):'—')+'</td><td class="num">'+(!suivi?'<span class="note">non suivi (aucune sortie notée)</span>':mq>0.01?'0 <span style="color:var(--warn);font-weight:700">· il manque '+esc(qCond(Math.round(mq*100)/100,p))+'</span> <span class="note">(sortie non notée ?)</span>':esc(qCond(Math.round(Math.max(0,cf)*100)/100,p)))+'</td></tr>'; }).join('');
     var vc=valeurConso(d.conso), caHT=d.ca/(1+(REGC.tvaVentes||6)/100);
     el.innerHTML=(lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Sorti de la réserve</th><th>Consommé par les ventes</th><th>Jeté (pertes déclarées)</th><th>Au comptoir en fin de journée</th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune sortie ni vente ce jour-là.</div>')+
       '<p class="note">Ce qui est sorti et pas encore vendu reste au comptoir et passe au lendemain : ce n’est pas une perte. Ce qui n’est pas réutilisable est déclaré en perte par le gérant et sort du comptoir. Les écarts non expliqués apparaissent à l’inventaire.'+(caHT>0&&vc.v?' Food cost théorique du jour : <b>'+Math.round(vc.v*100/caHT)+' %</b> ('+eur(vc.v)+' de matière pour '+eur(caHT)+' de CA HT'+(vc.manque?', certains prix manquent':'')+').':'')+'</p>';
