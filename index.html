@@ -1749,6 +1749,15 @@ function executerOutil(bloc){
 }
 function bulle(role,html){ var d=document.createElement('div'); d.className=role==='user'?'ass-me':'ass-ai'; d.innerHTML=html; $('assMsgs').appendChild(d); $('assMsgs').scrollTop=1e9; return d; }
 function mdLeger(t){ return esc(t).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>'); }
+/* les réflexions (thinking) d'une question précédente sont liées à ses consignes d'alors : on ne renvoie que celles de la question en cours */
+function convSansAnciennesReflexions(conv){
+  var derniere=-1; conv.forEach(function(m,i){ if(m.role==='user'&&typeof m.content==='string') derniere=i; });
+  return conv.map(function(m,i){
+    if(i>=derniere||m.role!=='assistant'||!Array.isArray(m.content)) return m;
+    var c=m.content.filter(function(b){ return b.type!=='thinking'&&b.type!=='redacted_thinking'; });
+    return {role:'assistant',content:c.length?c:[{type:'text',text:'…'}]};
+  });
+}
 function envoyerAss(texte){
   if(ASS.occupe||!texte.trim()) return;
   ASS.occupe=true; bulle('user',esc(texte)); $('assIn').value='';
@@ -1756,7 +1765,7 @@ function envoyerAss(texte){
   var att=bulle('ai','<span class="note">Je regarde tes données…</span>'), tours=0;
   var ctx='\n\nNous sommes le '+new Date().toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' ('+jour()+'), il est '+hhmm(Date.now())+'.';
   function tour(){
-    return appelRelais('/chat',{briefing:ASS.briefing+ctx,messages:ASS.conv,tools:OUTILS}).then(function(rep){
+    return appelRelais('/chat',{briefing:ASS.briefing+ctx,messages:convSansAnciennesReflexions(ASS.conv),tools:OUTILS}).then(function(rep){
       ASS.conv.push({role:'assistant',content:rep.content});
       var textes=rep.content.filter(function(c){return c.type==='text'}).map(function(c){return c.text}).join('\n');
       if(textes){ att.innerHTML=mdLeger(textes); att=null; }
