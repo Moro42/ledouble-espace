@@ -388,8 +388,6 @@ body.connecte .ass-fab{display:block}
       <button class="btn small sec" id="fiReprendre" style="margin-top:10px">Reprendre les prix de toutes les factures</button>
       <h3>Marge de chaque produit vendu</h3>
       <div class="card" id="fiMarges"><div class="empty">Chargement…</div></div>
-      <h3>TVA du mois</h3>
-      <div class="card" id="fiTva"></div>
       <p class="note" style="margin-top:18px">Charges fixes mensuelles : dans ⚙ Paramètres.</p>
     </section>
 
@@ -1162,7 +1160,6 @@ function rendreATraiter(){
     if(dbl.length) it.push({n:dbl.length,grave:1,txt:'Facture'+(dbl.length>1?'s':'')+' enregistrée'+(dbl.length>1?'s':'')+' en double',sous:dbl.slice(0,4).map(function(x){ return esc(nomCourtF(x.fournisseur))+' n° '+esc(x.numero); }).join(' · ')+' : supprime le double, sinon tes achats sont comptés deux fois',v:'factures',cible:'faRegistre'});
     if(aAn) it.push({n:aAn,txt:'Photo'+(aAn>1?'s':'')+' de facture envoyée'+(aAn>1?'s':'')+' par le gérant, à analyser',v:'factures',cible:'faATraiter'});
     if(aVe) it.push({n:aVe,txt:'Livraison'+(aVe>1?'s':'')+' à vérifier',v:'factures',cible:'faATraiter'});
-    if(sHT) it.push({n:sHT,txt:'Facture'+(sHT>1?'s':'')+' sans total HT',sous:'comptée'+(sHT>1?'s':'')+' 0 € dans le compte de résultat : à compléter avec « Modifier »',v:'factures',cible:'faRegistre'});
     // prix d'achat
     var noms={}; (SC.produits||[]).forEach(function(p){ noms[p.id]=p.nom; });
     var aConf=[], sauts=[];
@@ -2273,7 +2270,7 @@ function rendreRegistre(){
   var ht=0, tva=0, ttc=0, parTaux={}, hausses=0;
   liste.forEach(function(x){ ht+=n2(x.totalHT); tva+=n2(x.totalTVA); ttc+=n2(x.totalTTC); hausses+=x.hausses||0; (x.tva||[]).forEach(function(t){ parTaux[t.taux]=(parTaux[t.taux]||0)+n2(t.montant); }); });
   var dblIds={}; facturesDoublons().forEach(function(x){ dblIds[x.__id]=1; });
-  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="tag tir" title="Le total HT n’a pas été lu : cette facture compte pour 0 € dans le compte de résultat. Touche Modifier pour le compléter.">à compléter</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
+  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="note">—</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
   $('faRegistre').innerHTML=liste.length?'<div class="scroll"><table class="table"><tr><th>Date</th><th>Fournisseur</th><th>N°</th><th>HT</th><th>TVA</th><th>TTC</th><th>Contrôles</th><th></th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune facture enregistrée pour ce mois.</div>';
   // TVA collectée sur les ventes (estimation au taux réglé) puis TVA à payer
   var taux=(REGC.tvaVentes!=null?REGC.tvaVentes:6), du=mois+'-01', au=mois+'-31';
@@ -2872,7 +2869,7 @@ function rendreResultat(){
     rendreArgent(A,R,caHT,joursV,tva);
     var collectee=caTTC-caHT;
     function l(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
-    $('fiTva').innerHTML=l('TVA collectée sur les ventes (estimation à '+String(tva).replace('.',',')+' %)',eur(collectee))+l('TVA récupérable (factures du mois)',eur(A.tvaRec))+l('TVA à payer estimée',eur(collectee-A.tvaRec),'font-weight:800')+'<p class="note">Estimation pour ton suivi : la déclaration officielle se fait avec ton comptable.</p>';
+    if($('fiTva')) $('fiTva').innerHTML=l('TVA collectée sur les ventes (estimation à '+String(tva).replace('.',',')+' %)',eur(collectee))+l('TVA récupérable (factures du mois)',eur(A.tvaRec))+l('TVA à payer estimée',eur(collectee-A.tvaRec),'font-weight:800')+'<p class="note">Estimation pour ton suivi : la déclaration officielle se fait avec ton comptable.</p>';
   }).catch(function(e){ $('fiResultat').innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
 }
 
@@ -2945,13 +2942,11 @@ function rendreArgent(A,R,caHT,joursV,tva){
   if(A.membresSansMode.length) h+='<p class="note" style="color:var(--warn)">Indique dans Équipe si ces personnes sont payées en espèces ou par virement : '+esc(A.membresSansMode.join(', '))+'. En attendant, seul l’argent réellement sorti pour elles est compté.</p>';
   var sansNom=N.personnel.lignes.filter(function(l){ return l.sansNom&&l.src!=='heures'; });
   if(sansNom.length) h+='<p class="note">'+sansNom.length+' paiement(s) de personnel sans prénom reconnu : compté(s) comme payé(s) en espèces.</p>';
-  // pour le comptable
-  var autresHT=A.sorti-N.marchandises.lignes.filter(function(l){return l.src==='facture'}).reduce(function(t,l){return t+l.montant},0);
-  var resHT=caHT-A.achatsHT-autresHT, tauxMarge=caHT?(caHT-N.marchandises.total/(1+tva/100))/caHT:0, fixesEtc=N.personnel.total+N.fixes.total+N.emballages.total+N.autres.total;
-  var seuil=tauxMarge>0?fixesEtc/tauxMarge:null, jOuv=joursV||22;
+  // seuil de rentabilité : ventes nécessaires par jour pour couvrir tout ce qui n'est pas de la marchandise (montants réels, sans TVA)
+  var partMarch=R.ca?N.marchandises.total/R.ca:0, autresCouts=N.personnel.total+N.fixes.total+N.emballages.total+N.autres.total, jOuv=joursV||22;
+  var seuil=partMarch<1?autresCouts/(1-partMarch):null;
   h+='<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:6px">'+
-    '<div class="row"><span class="l note">Pour le comptable : résultat estimé HT ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)</span><b class="num" style="color:'+(resHT>=0?'var(--ok)':'var(--danger)')+'">'+(resHT>=0?'+':'')+eur(resHT)+'</b></div>'+
-    '<div class="row"><span class="l note">Seuil de rentabilité</span><b class="num">'+(seuil!=null?'≈ '+eur(seuil/jOuv*(1+tva/100))+' de ventes par jour':'—')+'</b></div></div>';
+    '<div class="row"><span class="l note">Seuil de rentabilité ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)</span><b class="num">'+(seuil!=null&&R.ca?'≈ '+eur(seuil/jOuv)+' de ventes par jour':'—')+'</b></div></div>';
   // dépenses du téléphone : remboursements, export, catégories
   var aRemb=A.dep.filter(function(x){ return x.aRembourser&&!x.rembourse; }).reduce(function(t,x){ return t+x.montant; },0);
   var url=location.href.replace(/[^\/]*([?#].*)?$/,'')+'depense.html';
