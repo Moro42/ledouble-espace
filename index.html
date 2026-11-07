@@ -1115,8 +1115,10 @@ function rendreATraiter(){
     db.collection('clotures').where('jour','>=',depuis).get().catch(function(){ return null; }),
     db.collection('enveloppes').get().catch(function(){ return null; }),
     db.collection('etat').doc('fond').get().catch(function(){ return null; }),
-    PRIX_CHARGE?Promise.resolve():chargerPrix()
+    PRIX_CHARGE?Promise.resolve():chargerPrix(),
+    db.collection('config').doc('ignores').get().catch(function(){ return null; })
   ]).then(function(r){
+    AT_IGN=(r[5]&&r[5].exists&&r[5].data().ign)||{};
     var it=[]; // {n, txt, sous, v, cible, grave}
     // factures
     var fl=FAC.liste||[], dbl=facturesDoublons(), aAn=fl.filter(function(x){return x.statut==='a_analyser'}).length, aVe=fl.filter(function(x){return x.statut==='a_verifier'}).length, sHT=fl.filter(sansHT).length;
@@ -1148,14 +1150,28 @@ function rendreATraiter(){
     if(PASTILLES['outil-stock']) it.push({n:PASTILLES['outil-stock'],txt:'Produits sous le seuil d’alerte',v:'stock',cible:'skEtat'});
     if(SMV&&SMV.length&&!SMV.some(function(m){return m.type==='inventaire'})) it.push({n:'!',txt:'Premier inventaire pas encore fait',sous:'Le stock reste approximatif tant que la réserve et le comptoir n’ont pas été comptés une première fois (sur la tablette du gérant)',v:'stock',cible:'skEtat'});
     var el=$('dATraiter'); if(!el) return;
-    if(!it.length){ el.className='card hidden'; el.innerHTML=''; return; }
+    // une ligne ignorée revient d'elle-même si son contenu change (nouveau doublon, autre montant…)
+    it.forEach(function(x){ x.cle=cleAT(x.txt+'|'+(x.sous||'')+'|'+x.n); }); AT_CLES=it.map(function(x){ return x.cle; });
+    var nIgn=it.filter(function(x){ return AT_IGN[x.cle]; }).length;
+    it=it.filter(function(x){ return !AT_IGN[x.cle]; });
+    if(!it.length&&!nIgn){ el.className='card hidden'; el.innerHTML=''; return; }
     it.sort(function(a,b){ return (b.grave||0)-(a.grave||0); });
-    el.className='card'; el.innerHTML='<h3 style="margin:0 0 4px">À traiter</h3>'+it.map(function(x){
-      return '<div class="at-row"><span class="at-n'+(x.grave?'':' w')+'">'+x.n+'</span><span class="l"><b>'+x.txt+'</b>'+(x.sous?'<br><span class="note">'+x.sous+'</span>':'')+'</span><button class="btn small sec" data-at="'+x.v+'|'+x.cible+'">Voir</button></div>';
-    }).join('');
+    el.className='card'; el.innerHTML='<h3 style="margin:0 0 4px">À traiter</h3>'+(it.length?it.map(function(x){
+      return '<div class="at-row"><span class="at-n'+(x.grave?'':' w')+'">'+x.n+'</span><span class="l"><b>'+x.txt+'</b>'+(x.sous?'<br><span class="note">'+x.sous+'</span>':'')+'</span><span class="inline" style="gap:6px;flex-wrap:nowrap"><button class="btn small sec" data-at="'+x.v+'|'+x.cible+'">Voir</button><button class="btn small sec" data-atign="'+x.cle+'" title="Masquer ce point tant qu’il ne change pas">Ignorer</button></span></div>';
+    }).join(''):'<p class="note" style="margin:6px 0">Rien à traiter.</p>')+
+      (nIgn?'<p class="note" style="margin:8px 0 0">'+nIgn+' point'+(nIgn>1?'s':'')+' ignoré'+(nIgn>1?'s':'')+' · <a href="#" id="atReaff">Réafficher</a></p>':'');
   });
 }
+var AT_IGN={}, AT_CLES=[];
+function cleAT(t){ var h=5381; for(var i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return 'k'+(h>>>0).toString(36); }
 document.addEventListener('click',function(e){ var b=e.target.closest('[data-at]'); if(!b) return; var p=b.getAttribute('data-at').split('|'); allerA(p[0],p[1]); });
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-atign],#atReaff'); if(!b) return; e.preventDefault();
+  if(b.id==='atReaff'){ AT_IGN={}; rendreATraiter(); db.collection('config').doc('ignores').set({ign:{},maj:Date.now()}).catch(function(er){ toast('Enregistrement impossible ('+er.code+')'); }); return; }
+  var k=b.getAttribute('data-atign'), ign={}; AT_CLES.forEach(function(c){ if(AT_IGN[c]) ign[c]=AT_IGN[c]; }); ign[k]=jour(); AT_IGN=ign;
+  var row=b.closest('.at-row'); if(row) row.style.display='none';
+  db.collection('config').doc('ignores').set({ign:ign,maj:Date.now()}).then(function(){ rendreATraiter(); }).catch(function(er){ toast('Enregistrement impossible ('+er.code+')'); });
+});
 function ligneB(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
 var closJour=[], dernierR=null;
 function majCloture(){
