@@ -244,7 +244,7 @@ body.connecte .ass-fab{display:block}
     <button class="out" id="btnOut">Quitter</button>
   </header>
   <nav class="nav" id="nav">
-    <button data-v="direct" aria-current="page">Aujourd’hui</button><button data-v="historique">Ventes</button><button data-v="enveloppes">Caisse et argent</button><button data-v="factures">Achats et coûts</button><button data-v="stock">Stock</button><button data-v="equipe">Équipe</button>
+    <button data-v="direct" aria-current="page">Aujourd’hui</button><button data-v="historique">Chiffres</button><button data-v="enveloppes">Caisse et argent</button><button data-v="factures">Achats et coûts</button><button data-v="stock">Stock</button><button data-v="equipe">Équipe</button>
     <span class="nav-sep"></span><button data-v="reglages">⚙ Paramètres</button>
   </nav>
   <main>
@@ -275,7 +275,10 @@ body.connecte .ass-fab{display:block}
 
     <!-- HISTORIQUE -->
     <section class="view" id="v-historique">
-      <h2>Ventes</h2>
+      <h2>Chiffres</h2>
+      <div class="inline" style="justify-content:space-between;margin:0 0 10px"><h3 style="margin:0">L’argent du mois</h3><label class="note">Mois <input class="in" type="month" id="fiMois" style="width:auto"></label></div>
+      <div class="card" id="fiResultat"><div class="empty">Calcul en cours…</div></div>
+      <h3>Détail des ventes</h3>
       <div class="inline" style="margin-bottom:14px">
         <button class="btn small sec" data-per="7">7 jours</button>
         <button class="btn small sec" data-per="30">30 jours</button>
@@ -370,9 +373,7 @@ body.connecte .ass-fab{display:block}
     <!-- FACTURES -->
     <section class="view" id="v-factures">
       <h2>Achats et coûts</h2>
-      <div class="inline" style="justify-content:space-between;margin:0 0 10px"><h3 style="margin:0">L’argent du mois</h3><label class="note">Mois <input class="in" type="month" id="fiMois" style="width:auto"></label></div>
-      <div class="card" id="fiResultat"><div class="empty">Calcul en cours…</div></div>
-      <h3>Factures</h3>
+      <h3 style="margin-top:0">Factures</h3>
       <div class="card form">
         <b>Ajouter une facture</b>
         <p class="note">Une photo, un PDF ou un fichier Peppol (XML). Les photos et PDF sont lus par l’IA ; les fichiers Peppol sont lus directement, sans IA. Tu vérifies toujours avant d’enregistrer.</p>
@@ -567,7 +568,7 @@ function uneFois(cle,fn){ if(!faites[cle]){ faites[cle]=true; fn(); } }
 var vues={direct:null,enveloppes:initEnveloppes,audit:initAudit,equipe:initEquipe,
   stock:function(){ uneFois('_stock',initStock); },
   factures:function(){ initFactures(); uneFois('_finances',initFinances); },
-  historique:initHistorique,
+  historique:function(){ initHistorique(); uneFois('_finances',initFinances); },
   reglages:function(){ chargerCarte(); chargerReglages(); uneFois('_stock',initStock); uneFois('_finances',initFinances); },
   maj:chargerMaj}, faites={};
 function allerA(v,cible){ var b=document.querySelector('#nav [data-v="'+v+'"]'); if(b) b.click(); if(cible) setTimeout(function(){ var el=$(cible); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },150); }
