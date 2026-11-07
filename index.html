@@ -186,6 +186,16 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 .nav button[data-v]{padding:8px 11px}
 .nav-g{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a8076;margin:0 2px 0 4px;white-space:nowrap;align-self:center}
 .nav-sep{width:1px;height:24px;background:var(--line);margin:0 6px;flex:none;align-self:center}
+details.replie>summary{cursor:pointer;list-style:none;margin:22px 0 10px}
+details.replie>summary::-webkit-details-marker{display:none}
+#v-reglages h3[id],#donnees,#sumupForm,#v-maj{scroll-margin-top:130px}
+.at-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.at-row:first-of-type{border-top:0}
+.at-row .l{flex:1}
+.at-n{display:inline-block;min-width:24px;text-align:center;font-weight:800;border-radius:8px;padding:1px 6px;background:#F7E3E1;color:var(--danger)}
+.at-n.w{background:#FBF0DC;color:var(--warn)}
+.ass-fab{display:none}
+body.connecte .ass-fab{display:block}
 .journal-defile{max-height:460px;overflow-y:auto;border-top:1px solid var(--surface2)}
 #v-reglages #v-maj{margin-top:28px}
 .toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:700;z-index:50;display:none}
@@ -228,15 +238,14 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
     <button class="out" id="btnOut">Quitter</button>
   </header>
   <nav class="nav" id="nav">
-    <span class="nav-g">Suivi</span><button data-v="direct" aria-current="page">En direct</button><button data-v="historique">Historique</button>
-    <span class="nav-sep"></span><span class="nav-g">Argent</span><button data-v="enveloppes">Enveloppes</button><button data-v="factures">Factures</button><button data-v="finances">Finances</button>
-    <span class="nav-sep"></span><span class="nav-g">Magasin</span><button data-v="stock">Stock</button><button data-v="equipe">Équipe</button>
-    <span class="nav-sep"></span><span class="nav-g">Caisse</span><button data-v="carte">Carte & prix</button><button data-v="reglages">Réglages</button>
+    <button data-v="direct" aria-current="page">Aujourd’hui</button><button data-v="historique">Ventes</button><button data-v="enveloppes">Caisse et argent</button><button data-v="factures">Achats et coûts</button><button data-v="stock">Stock</button><button data-v="equipe">Équipe</button>
+    <span class="nav-sep"></span><button data-v="reglages">⚙ Paramètres</button>
   </nav>
   <main>
     <!-- EN DIRECT -->
     <section class="view on" id="v-direct">
       <h2 id="dTitre">Aujourd’hui</h2>
+      <div class="card hidden" id="dATraiter" style="margin-bottom:12px;border-left:5px solid var(--warn)"></div>
       <div class="grid kpis">
         <div class="kpi hero"><span>Chiffre d’affaires</span><b class="num" id="kCa">0,00 €</b><small id="kCaSub"></small></div>
         <div class="kpi"><span>Tickets</span><b class="num" id="kNb">0</b><small id="kNbSub"></small></div>
@@ -253,15 +262,13 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       </div>
       <div class="card hidden" id="dNotes" style="margin-top:12px;border-left:5px solid var(--accent)"></div>
       <div class="card alert hidden" id="dAlertes" style="margin-top:12px"></div>
-      <h3>Caisse du jour</h3>
-      <div class="card" id="dCloture"><div class="empty">Chargement…</div></div>
       <h3>Journal en direct</h3>
       <div class="card"><div class="inline" style="justify-content:space-between;margin-bottom:6px"><span class="note" id="dJournalNb"></span><span class="inline"><button class="btn small sec" id="jPrem">↓ Première vente</button><button class="btn small sec" id="jDer">↑ Dernières</button></span></div><div id="dJournal" class="journal-defile"><div class="empty">Connexion…</div></div></div>
     </section>
 
     <!-- HISTORIQUE -->
     <section class="view" id="v-historique">
-      <h2>Historique</h2>
+      <h2>Ventes</h2>
       <div class="inline" style="margin-bottom:14px">
         <button class="btn small sec" data-per="7">7 jours</button>
         <button class="btn small sec" data-per="30">30 jours</button>
@@ -282,8 +289,6 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
         <div class="card"><h3 style="margin-top:0">Produits vendus</h3><div id="hProd"></div></div>
         <div class="card"><h3 style="margin-top:0">Extras</h3><div id="hExt"></div></div>
       </div>
-      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Sorties d’argent</h3><div id="hSor"></div></div>
-      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Clôtures et écarts de caisse</h3><div id="hClo"></div></div>
     </section>
 
     <!-- AUDIT -->
@@ -300,7 +305,10 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
 
     <!-- ENVELOPPES -->
     <section class="view" id="v-enveloppes">
-      <h2>Enveloppes</h2>
+      <h2>Caisse et argent</h2>
+      <h3>Caisse du jour</h3>
+      <div class="card" id="dCloture"><div class="empty">Chargement…</div></div>
+      <h3>Enveloppes</h3>
       <div class="inline" style="margin-bottom:14px">
         <div class="bascule"><button data-enper="7" aria-pressed="false">7 jours</button><button data-enper="30" aria-pressed="true">30 jours</button><button data-enper="mois" aria-pressed="false">Mois</button></div>
         <label class="inline note">Du <input class="in" type="date" id="enDu" style="width:auto"></label><label class="inline note">au <input class="in" type="date" id="enAu" style="width:auto"></label>
@@ -310,6 +318,15 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <div class="card" style="margin-top:12px"><div id="enListe"></div>
         <div class="inline" style="margin-top:12px"><button class="btn prim" id="enRecup" disabled>J’ai récupéré la sélection</button><button class="btn small sec" id="enTout">Tout sélectionner</button></div>
         <p class="note">Touche une date pour voir le détail (compté, fond laissé, billets et pièces, rangement au coffre).</p></div>
+      <div class="card form" style="margin-top:12px" id="enApport">
+        <b>Remettre de l’argent d’une enveloppe dans la caisse</b>
+        <p class="note">Par exemple pour compléter le fond. L’enveloppe diminue et le fond attendu à la prochaine ouverture augmente d’autant.</p>
+        <div class="inline"><label class="note">Montant € <input class="in px num" id="apMontant" inputmode="decimal" style="width:110px"></label><label class="note">Pris de l’enveloppe du <select class="in" id="apEnv" style="width:auto"></select></label></div>
+        <label class="f">Note (facultatif)<input class="in" id="apNote" autocomplete="off" placeholder="fond complété avant l’ouverture"></label>
+        <div class="inline"><button class="btn prim" id="apGo">Enregistrer</button><span class="note" id="apEtat"></span></div>
+      </div>
+      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Clôtures et écarts de caisse</h3><div id="hClo"><div class="empty">Chargement…</div></div></div>
+      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Sorties d’argent du tiroir</h3><div id="hSor"><div class="empty">Chargement…</div></div></div>
     </section>
 
     <!-- ÉQUIPE -->
@@ -335,20 +352,19 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <p class="note" id="skResume"></p>
       <h3>Stock actuel</h3><div class="card" id="skEtat"><div class="empty">Chargement…</div></div>
       <h3>Pertes</h3><div class="card" id="skPertes"></div>
-      <h3>Mouvements des 30 derniers jours</h3><div class="card" id="skMvts"></div>
       <h3>Sorties du jour : sorti · consommé · comptoir</h3>
       <div class="inline" style="margin-bottom:10px"><label class="note">Jour <input class="in" type="date" id="skSortJour" style="width:auto"></label><button class="btn small dark" id="skSortVoir">Afficher</button></div>
       <div class="card" id="skSorties"><div class="empty">Chargement…</div></div>
       <h3>Bilans d’inventaire : pertes et food cost réel</h3><div id="skBilans"><div class="empty">Chargement…</div></div>
-      <h3>Règles de consommation</h3><div class="card form" id="skRegles"></div>
+      <details class="replie"><summary><h3 style="display:inline">Mouvements des 30 derniers jours</h3> <span class="note">(toucher pour afficher)</span></summary><div class="card" id="skMvts"></div></details>
       <div id="skCmds" class="hidden"></div>
-      <div id="skConfig"></div>
-      <div class="savebar"><button class="btn prim" id="skSave">Enregistrer produits et fournisseurs</button></div>
+      <p class="note" style="margin-top:18px">Produits suivis, fournisseurs et règles de consommation : dans ⚙ Paramètres.</p>
     </section>
 
     <!-- FACTURES -->
     <section class="view" id="v-factures">
-      <h2>Factures</h2>
+      <h2>Achats et coûts</h2>
+      <h3 style="margin-top:0">Factures</h3>
       <div class="card form">
         <b>Ajouter une facture</b>
         <p class="note">Une photo, un PDF ou un fichier Peppol (XML). Les photos et PDF sont lus par l’IA ; les fichiers Peppol sont lus directement, sans IA. Tu vérifies toujours avant d’enregistrer.</p>
@@ -359,11 +375,6 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <h3>Registre des achats</h3>
       <div class="inline" style="margin-bottom:10px"><label class="note">Mois <input class="in" type="month" id="faMois" style="width:auto"></label><button class="btn small dark" id="faExport">Exporter pour le comptable</button></div>
       <div class="card" id="faRegistre"><div class="empty">Chargement…</div></div>
-    </section>
-
-    <!-- FINANCES -->
-    <section class="view" id="v-finances">
-      <h2>Finances</h2>
       <h3>Prix d’achat des produits</h3>
       <div class="card" id="fiPrix"><div class="empty">Chargement…</div></div>
       <button class="btn small sec" id="fiReprendre" style="margin-top:10px">Reprendre les prix de toutes les factures</button>
@@ -374,26 +385,28 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:14px}
       <div class="card" id="fiResultat"></div>
       <h3>Dépenses diverses du mois</h3>
       <div class="card" id="fiDepenses"><div class="empty">Chargement…</div></div>
-      <h3>Charges fixes mensuelles</h3>
-      <div class="card form" id="fiCharges"></div>
       <h3>TVA du mois</h3>
       <div class="card" id="fiTva"></div>
+      <p class="note" style="margin-top:18px">Charges fixes mensuelles : dans ⚙ Paramètres.</p>
     </section>
 
-    <!-- CARTE -->
-    <section class="view" id="v-carte">
-      <h2>Carte & prix</h2>
+    <!-- PARAMETRES -->
+    <section class="view" id="v-reglages">
+      <h2>Paramètres</h2>
+      <div class="inline" style="margin-bottom:14px;flex-wrap:wrap"><a class="btn small sec" href="#paCarte">Carte et prix</a><a class="btn small sec" href="#paCaisse">Caisse</a><a class="btn small sec" href="#paStock">Produits et fournisseurs</a><a class="btn small sec" href="#paCharges">Charges fixes</a><a class="btn small sec" href="#paAss">Assistant IA</a><a class="btn small sec" href="#donnees">Données</a><a class="btn small sec" href="#sumupForm">SumUp</a><a class="btn small sec" href="#v-maj">Mises à jour</a></div>
+      <h3 id="paCarte">Carte et prix</h3>
       <p class="note">Les changements arrivent sur la caisse en moins d’une minute, dès que la commande en cours est encaissée. Décocher « En vente » masque un produit sans le supprimer.</p>
       <div id="carteForm"><div class="empty">Chargement…</div></div>
       <div class="savebar"><span class="note" id="carteEtat"></span><button class="btn prim" id="carteSave">Publier la carte</button></div>
-    </section>
-
-    <!-- REGLAGES -->
-    <section class="view" id="v-reglages">
-      <h2>Réglages de la caisse</h2>
+      <h3 id="paCaisse">Réglages de la caisse</h3>
       <div id="regForm"><div class="empty">Chargement…</div></div>
       <div class="savebar"><span class="note" id="regEtat"></span><button class="btn prim" id="regSave">Enregistrer les réglages</button></div>
-      <h3>Assistant IA</h3>
+      <h3 id="paStock">Règles de consommation</h3><div class="card form" id="skRegles"><div class="empty">Chargement…</div></div>
+      <div id="skConfig"></div>
+      <div class="savebar"><button class="btn prim" id="skSave">Enregistrer produits et fournisseurs</button></div>
+      <h3 id="paCharges">Charges fixes mensuelles</h3>
+      <div class="card form" id="fiCharges"><div class="empty">Chargement…</div></div>
+      <h3 id="paAss">Assistant IA</h3>
       <div class="card form">
         <label class="f">Adresse du relais Cloudflare<input class="in" id="assRelais" placeholder="https://ledouble-assistant.xxxx.workers.dev" autocomplete="off"></label>
         <label class="f">Ce que l’assistant doit savoir sur LE DOUBLE (tu peux compléter ou corriger à tout moment)<textarea class="in" id="assBriefing" rows="10" style="padding:10px;border:1.5px solid var(--line);border-radius:10px;font:inherit"></textarea></label>
@@ -479,14 +492,22 @@ $('lgPass').addEventListener('keydown',function(e){if(e.key==='Enter')$('lgBtn')
 $('btnOut').onclick=function(){auth.signOut()};
 var demarre=false;
 auth.onAuthStateChanged(function(u){
-  if(!u){ $('login').className='login'; $('app').className='hidden'; return; }
+  if(!u){ $('login').className='login'; $('app').className='hidden'; document.body.classList.remove('connecte'); return; }
   if((u.email||'').toLowerCase()!==PROPRIO){ $('lgErr').textContent='Accès réservé au propriétaire (compte connecté : '+(u.email||'?')+').'; auth.signOut(); return; }
-  $('login').className='login hidden'; $('app').className='';
+  $('login').className='login hidden'; $('app').className=''; document.body.classList.add('connecte');
   if(!demarre){ demarre=true; demarrer(); }
 });
 
 /* ---------- navigation ---------- */
-var vues={direct:null,finances:initFinances,enveloppes:initEnveloppes,audit:initAudit,equipe:initEquipe,stock:initStock,factures:initFactures,historique:initHistorique,carte:chargerCarte,reglages:chargerReglages,maj:chargerMaj}, faites={};
+// chaque bloc ne se charge qu'une fois, même s'il est partagé entre deux onglets
+function uneFois(cle,fn){ if(!faites[cle]){ faites[cle]=true; fn(); } }
+var vues={direct:null,enveloppes:initEnveloppes,audit:initAudit,equipe:initEquipe,
+  stock:function(){ uneFois('_stock',initStock); },
+  factures:function(){ initFactures(); uneFois('_finances',initFinances); },
+  historique:initHistorique,
+  reglages:function(){ chargerCarte(); chargerReglages(); uneFois('_stock',initStock); uneFois('_finances',initFinances); },
+  maj:chargerMaj}, faites={};
+function allerA(v,cible){ var b=document.querySelector('#nav [data-v="'+v+'"]'); if(b) b.click(); if(cible) setTimeout(function(){ var el=$(cible); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },150); }
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-mb]'); if(!b) return;
   modeBarres=b.getAttribute('data-mb');
@@ -570,7 +591,9 @@ function demarrer(){
   setTimeout(function(){ try{ chargerPropositionsPastille(); }catch(e){} },1500);
   suivreJour();
   suivreClotures();
+  chargerApports();
   suivreNotes();
+  setTimeout(function(){ try{ majATraiter(); }catch(e){} },2500);
   setTimeout(function(){ try{ chargerFactures(); }catch(e){} },1200);
   setTimeout(function(){ try{ initStockPastille(); }catch(e){} },2000);
   setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); } },60000);
@@ -609,7 +632,7 @@ function rendreDirect(evs,nouveaux){
   $('kMenu').textContent=pct(r.menus,r.nb);
   $('kMenuSub').textContent=r.menus+' sur '+r.nb;
   var hs=[],lb=[],a=-1,hn=new Date().getHours();
-  var hMin=9,hMax=21; Object.keys(r.heures).forEach(function(k){k=+k; if(k<hMin)hMin=k; if(k>hMax)hMax=k;});
+  var hMin=9,hMax=19; Object.keys(r.heures).forEach(function(k){k=+k; if(k<hMin)hMin=k; if(k>hMax)hMax=k;});
   for(var h=hMin;h<=hMax;h++){ hs.push(modeBarres==='clients'?(r.clientsH[h]||0):(r.heures[h]||0)); lb.push(h+'h'); if(h===hn)a=hs.length-1; }
   barres($('dBars'),hs,lb,a,modeBarres==='clients');
   var hp=-1,hv=0; Object.keys(r.clientsH).forEach(function(k){ if(r.clientsH[k]>hv){hv=r.clientsH[k];hp=+k;} });
@@ -887,7 +910,7 @@ function heatmap(r,mode){
     }
     h+='</tr>';
   });
-  h+='</table><p class="note">'+(parDate?'Chaque ligne est une journée de la période choisie.':'Moyenne calculée sur les jours où la caisse a vendu ; entre parenthèses, le nombre de jours pris en compte.')+(mode==='clients'?' Les cases entourées dépassent le seuil « à deux » ('+seuil+' clients/heure, réglable dans Réglages caisse).':'')+'</p>';
+  h+='</table><p class="note">'+(parDate?'Chaque ligne est une journée de la période choisie.':'Moyenne calculée sur les jours où la caisse a vendu ; entre parenthèses, le nombre de jours pris en compte.')+(mode==='clients'?' Les cases entourées dépassent le seuil « à deux » ('+seuil+' clients/heure, réglable dans ⚙ Paramètres).':'')+'</p>';
   return {titre:titre,html:h};
 }
 
@@ -912,21 +935,25 @@ function chargerEnveloppes(){
   ]).then(function(r){
     var parJ={}; r[0].docs.forEach(function(d){ var c=d.data(); (parJ[c.jour]=parJ[c.jour]||[]).push(c); });
     var evs=r[1].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}), R=analyser(evs);
-    var recup={}; r[2].docs.forEach(function(d){ recup[d.id]=d.data(); });
+    var recup={}, retire={}; r[2].docs.forEach(function(d){ var dd=d.data(); if(dd.le) recup[d.id]=dd; if(dd.retire) retire[d.id]=dd; });
+    lireApports(r[2].docs);
     var jours={}; Object.keys(parJ).forEach(function(j){ jours[j]=1; }); Object.keys(R.jours).forEach(function(j){ jours[j]=1; });
     var lignes=Object.keys(jours).sort().reverse().map(function(j){
-      var cl=parJ[j]||[], b=bilanJour(cl,R.cashJ[j],R.sortJ[j]), clo=b.clo, rangee=null;
+      var cl=parJ[j]||[], b=bilanJour(cl,R.cashJ[j],R.sortJ[j],apportsDuJour(j)), clo=b.clo, rangee=null;
       cl.forEach(function(c){ if(c.type==='enveloppe_rangee'&&(!rangee||c.tsClient>rangee.tsClient)) rangee=c; });
       if(!clo) return {jour:j,sansCloture:j<jour(),enCours:j===jour()};
       var fondL=clo.fondLaisse!=null?clo.fondLaisse:(clo.fondPrevu!=null?clo.fondPrevu:REGC.fondCaisse);
-      var env=clo.enveloppe!=null?clo.enveloppe:Math.max(0,clo.montant-fondL);
-      return {jour:j,clo:clo,env:env,ecart:b.ecart,fondL:fondL,fondIncomplet:clo.fondLaisse!=null&&clo.fondLaisse<REGC.fondCaisse,rangee:rangee,recup:recup[j]||null,ancienne:clo.fondLaisse==null&&!rangee&&!recup[j]};
+      var env=clo.enveloppe!=null?clo.enveloppe:Math.max(0,clo.montant-fondL), envInitial=env, rt=retire[j]||null;
+      if(rt) env=Math.max(0,env-(rt.retire||0));
+      return {jour:j,clo:clo,env:env,envInitial:envInitial,retraits:rt?(rt.retraits||[]):[],ecart:b.ecart,fondL:fondL,fondIncomplet:clo.fondLaisse!=null&&clo.fondLaisse<REGC.fondCaisse,rangee:rangee,recup:recup[j]||null,ancienne:clo.fondLaisse==null&&!rangee&&!recup[j]};
     });
     ENV.lignes=lignes; ENV.sel={};
     var aRecup=0, recupMois=0, ecartsMois=0;
     lignes.forEach(function(l){ if(!l.clo) return; if(!l.recup) aRecup+=l.env; else if((l.recup.le||'')>=m0) recupMois+=l.env; if(l.jour>=m0) ecartsMois+=l.ecart||0; });
     $('enKpi').innerHTML='<div class="kpi"><span>À récupérer (dans le coffre)</span><b class="num" style="color:var(--warn)">'+eur(aRecup)+'</b></div><div class="kpi"><span>Récupéré ce mois-ci</span><b class="num">'+eur(recupMois)+'</b></div><div class="kpi"><span>Écarts de caisse du mois</span><b class="num" style="color:'+(ecartsMois<-REGC.seuilEcart?'var(--danger)':'var(--ok)')+'">'+(ecartsMois>0?'+':'')+eur(ecartsMois)+'</b></div>';
     rendreEnveloppes();
+    rendreCaissePeriode(parJ,analyser(evs.filter(function(x){ return x.jour>=P.du&&x.jour<=P.au; })),P.du,P.au);
+    remplirApport();
   }).catch(function(e){ $('enListe').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
 }
 function rendreEnveloppes(){
@@ -936,9 +963,10 @@ function rendreEnveloppes(){
     var dj=new Date(x.jour+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'numeric'});
     if(!x.clo) return '<tr><td></td><td>'+dj+'</td><td>—</td><td></td><td></td><td>'+(x.enCours?'<span class="tag">Journée en cours</span>':'<span class="tag ann">Pas de clôture</span>')+'</td></tr>';
     var statut=x.recup?'<span class="tag carte">Récupérée le '+esc(String(x.recup.le).slice(8,10)+'/'+String(x.recup.le).slice(5,7))+'</span>':x.rangee?'<span class="tag tir">Dans le coffre</span>':x.ancienne?'<span class="tag">Statut inconnu</span>':'<span class="tag tir">Pas encore rangée</span>';
-    return '<tr><td>'+(x.recup?'✓':'<input type="checkbox" data-ensel="'+x.jour+'">')+'</td><td><a href="#" data-endet="'+x.jour+'">'+dj+'</a></td><td class="num"><b>'+eur(x.env)+'</b>'+(x.fondIncomplet?' <span class="tag ann" title="Fond laissé '+eur(x.fondL)+'">fond incomplet</span>':'')+'</td><td class="num" style="color:'+(Math.abs(x.ecart)>REGC.seuilEcart?'var(--danger)':'var(--ok)')+'">'+(x.ecart>0?'+':'')+eur(x.ecart)+'</td><td>'+esc(nomPar(x.clo))+' · '+esc(x.clo.h||'')+'</td><td>'+statut+'</td></tr>'+
+    return '<tr><td>'+(x.recup?'✓':'<input type="checkbox" data-ensel="'+x.jour+'">')+'</td><td><a href="#" data-endet="'+x.jour+'">'+dj+'</a></td><td class="num"><b>'+eur(x.env)+'</b>'+(x.retraits.length?' <span class="tag" title="Enveloppe d’origine '+eur(x.envInitial)+'">−'+eur(x.envInitial-x.env)+' remis en caisse</span>':'')+(x.fondIncomplet?' <span class="tag ann" title="Fond laissé '+eur(x.fondL)+'">fond incomplet</span>':'')+'</td><td class="num" style="color:'+(Math.abs(x.ecart)>REGC.seuilEcart?'var(--danger)':'var(--ok)')+'">'+(x.ecart>0?'+':'')+eur(x.ecart)+'</td><td>'+esc(nomPar(x.clo))+' · '+esc(x.clo.h||'')+'</td><td>'+statut+'</td></tr>'+
       '<tr class="hidden" data-enligne="'+x.jour+'"><td></td><td colspan="5" class="note">Compté : <b>'+eur(x.clo.montant)+'</b> · fond laissé pour le lendemain : <b>'+eur(x.fondL)+'</b>'+(x.fondIncomplet?' (au lieu de '+eur(REGC.fondCaisse)+')':'')+' · enveloppe : <b>'+eur(x.env)+'</b>'+
       (x.clo.detail?' · billets et pièces : '+['b50','b20','b10','b5','p2','p1'].filter(function(k){return x.clo.detail[k]}).map(function(k){ return x.clo.detail[k]+'×'+k.slice(1)+(k[0]==='b'?' €':' €'); }).join(', ')+(x.clo.detail.pieces?', '+eur(x.clo.detail.pieces)+' en petites pièces':''):'')+
+      (x.retraits.length?' · remis en caisse : '+x.retraits.map(function(t){ return '<b>'+eur(t.montant)+'</b> le '+esc(String(t.le).slice(8,10)+'/'+String(t.le).slice(5,7))+(t.note?' ('+esc(t.note)+')':''); }).join(', ')+' (enveloppe d’origine '+eur(x.envInitial)+')':'')+
       (x.rangee?' · rangée au coffre à '+esc(x.rangee.h||'')+' par '+esc(nomPar(x.rangee)):'')+(x.recup?' · récupérée le '+esc(x.recup.le):'')+'</td></tr>';
   }).join('')+'</table></div>':'<div class="empty">Aucune clôture sur la période.</div>';
   majSelEnv();
@@ -954,7 +982,7 @@ document.addEventListener('click',function(e){
   if(b.id==='enRecup'){
     var js=Object.keys(ENV.sel); if(!js.length) return; var t=0; ENV.lignes.forEach(function(x){ if(ENV.sel[x.jour]) t+=x.env; });
     if(!confirm('Confirmer la récupération de '+js.length+' enveloppe(s), pour un total de '+eur(t)+' ?')) return;
-    Promise.all(js.map(function(j){ var x=ENV.lignes.filter(function(l){return l.jour===j})[0]; return db.collection('enveloppes').doc(j).set({le:jour(),h:hhmm(Date.now()),montant:x?x.env:0}); })).then(function(){ toast('Récupération enregistrée : '+eur(t)); chargerEnveloppes(); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
+    Promise.all(js.map(function(j){ var x=ENV.lignes.filter(function(l){return l.jour===j})[0]; return db.collection('enveloppes').doc(j).set({le:jour(),h:hhmm(Date.now()),montant:x?x.env:0},{merge:true}); })).then(function(){ toast('Récupération enregistrée : '+eur(t)); chargerEnveloppes(); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
     return;
   }
   if(b.id==='enExport'){
@@ -968,24 +996,111 @@ document.addEventListener('click',function(e){
 /* ---------- CLÔTURES ---------- */
 var REGC={fondCaisse:5000,seuilEcart:200,seuilDeux:25,tvaVentes:6};
 function chargerRegC(){ db.collection('config').doc('caisse').get().then(function(s){ if(s.exists){ var c=s.data(); if(c.fondCaisse!=null) REGC.fondCaisse=c.fondCaisse; if(c.seuilEcart!=null) REGC.seuilEcart=c.seuilEcart; if(c.seuilDeux!=null) REGC.seuilDeux=c.seuilDeux; if(c.tvaVentes!=null) REGC.tvaVentes=c.tvaVentes; } majCloture(); }).catch(function(){}); }
-function bilanJour(clos,cash,sorties){
+function bilanJour(clos,cash,sorties,apport){
   var ouv=null, clo=null;
   clos.forEach(function(c){ if(c.type==='ouverture' && (!ouv||c.tsClient>ouv.tsClient)) ouv=c; if(c.type==='cloture' && (!clo||c.tsClient>clo.tsClient)) clo=c; });
   var fond=ouv?(ouv.ok?(ouv.fondPrevu!=null?ouv.fondPrevu:REGC.fondCaisse):ouv.montant):(clo&&clo.fondPrevu!=null?clo.fondPrevu:REGC.fondCaisse);
-  var attendu=fond+(cash||0)-(sorties||0);
-  return {ouv:ouv,clo:clo,fond:fond,attendu:attendu,ecart:clo?clo.montant-attendu:null};
+  var attendu=fond+(cash||0)-(sorties||0)+(apport||0);
+  return {ouv:ouv,clo:clo,fond:fond,apport:apport||0,attendu:attendu,ecart:clo?clo.montant-attendu:null};
 }
+/* ---------- ARGENT REMIS D'UNE ENVELOPPE DANS LA CAISSE ---------- */
+// enveloppes/{jour} : retire (total en cents) et retraits [{montant,le,h,note,pourJour}]
+// pourJour = journée de caisse en cours au moment de l'apport (sinon l'apport va dans le fond de la prochaine ouverture)
+var APPORTS={};
+function lireApports(docs){ APPORTS={}; docs.forEach(function(d){ (d.data().retraits||[]).forEach(function(t){ if(t.pourJour) APPORTS[t.pourJour]=(APPORTS[t.pourJour]||0)+(t.montant||0); }); }); }
+function apportsDuJour(j){ return APPORTS[j]||0; }
+function chargerApports(){ return db.collection('enveloppes').get().then(function(s){ lireApports(s.docs); majCloture(); }).catch(function(){}); }
+function remplirApport(){
+  var sel=$('apEnv'); if(!sel) return;
+  var l=(ENV.lignes||[]).filter(function(x){ return x.clo&&!x.recup&&x.env>0; });
+  sel.innerHTML=l.length?l.map(function(x){ return '<option value="'+x.jour+'">'+new Date(x.jour+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'numeric'})+' · reste '+eur(x.env)+'</option>'; }).join(''):'<option value="">Aucune enveloppe dans le coffre</option>';
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest('#apGo'); if(!b) return;
+  var m=cents($('apMontant').value), j=$('apEnv').value, note=$('apNote').value.trim();
+  if(!m||m<=0){ $('apEtat').textContent='Indique un montant.'; return; }
+  if(!j){ $('apEtat').textContent='Choisis l’enveloppe d’où vient l’argent.'; return; }
+  var x=(ENV.lignes||[]).filter(function(l){ return l.jour===j; })[0];
+  if(x&&m>x.env){ $('apEtat').textContent='L’enveloppe ne contient que '+eur(x.env)+'.'; return; }
+  var ouv=closJour.some(function(c){ return c.type==='ouverture'; }), clo=closJour.some(function(c){ return c.type==='cloture'; });
+  var enCours=ouv&&!clo;
+  var quand=enCours?'Le montant attendu dans le tiroir aujourd’hui augmentera de '+eur(m)+'.':'Le fond attendu à la prochaine ouverture augmentera de '+eur(m)+'.';
+  if(!confirm('Remettre '+eur(m)+' de l’enveloppe du '+j.slice(8,10)+'/'+j.slice(5,7)+' dans la caisse ?\n'+quand)) return;
+  b.disabled=true; $('apEtat').textContent='Enregistrement…';
+  var FV=firebase.firestore.FieldValue, t={montant:m,le:jour(),h:hhmm(Date.now()),note:note,pourJour:enCours?jour():null};
+  var ops=[db.collection('enveloppes').doc(j).set({retire:FV.increment(m),retraits:FV.arrayUnion(t)},{merge:true})];
+  if(!enCours) ops.push(db.collection('etat').doc('fond').get().then(function(s){
+    var d=s.exists?s.data():null, hier=new Date(); hier.setDate(hier.getDate()-1);
+    var base=d&&d.montant!=null?d.montant:REGC.fondCaisse;
+    return db.collection('etat').doc('fond').set({montant:base+m,jour:d&&d.jour?d.jour:jour(hier),h:hhmm(Date.now()),par:'proprietaire',apport:m,avantApport:base});
+  }));
+  Promise.all(ops).then(function(){ toast(eur(m)+' remis en caisse'); $('apMontant').value=''; $('apNote').value=''; $('apEtat').textContent=enCours?'Ajouté au tiroir d’aujourd’hui.':'Fond attendu à la prochaine ouverture mis à jour.'; chargerApports(); chargerEnveloppes(); })
+    .catch(function(er){ $('apEtat').textContent='Enregistrement impossible ('+(er.code||er.message)+')'; })
+    .then(function(){ b.disabled=false; });
+});
+/* ---------- À TRAITER : tout ce qui attend une action, au même endroit ---------- */
+var tAT=null;
+function majATraiter(){ clearTimeout(tAT); tAT=setTimeout(rendreATraiter,400); }
+function rendreATraiter(){
+  var depuis=jour(new Date(Date.now()-45*864e5));
+  Promise.all([
+    db.collection('propositions').where('statut','==','en_attente').get().catch(function(){ return null; }),
+    db.collection('clotures').where('jour','>=',depuis).get().catch(function(){ return null; }),
+    db.collection('enveloppes').get().catch(function(){ return null; }),
+    db.collection('etat').doc('fond').get().catch(function(){ return null; }),
+    PRIX_CHARGE?Promise.resolve():chargerPrix()
+  ]).then(function(r){
+    var it=[]; // {n, txt, sous, v, cible, grave}
+    // factures
+    var fl=FAC.liste||[], dbl=facturesDoublons(), aAn=fl.filter(function(x){return x.statut==='a_analyser'}).length, aVe=fl.filter(function(x){return x.statut==='a_verifier'}).length, sHT=fl.filter(sansHT).length;
+    if(dbl.length) it.push({n:dbl.length,grave:1,txt:'Facture'+(dbl.length>1?'s':'')+' enregistrée'+(dbl.length>1?'s':'')+' en double',sous:dbl.slice(0,4).map(function(x){ return esc(nomCourtF(x.fournisseur))+' n° '+esc(x.numero); }).join(' · ')+' : supprime le double, sinon tes achats sont comptés deux fois',v:'factures',cible:'faRegistre'});
+    if(aAn) it.push({n:aAn,txt:'Photo'+(aAn>1?'s':'')+' de facture envoyée'+(aAn>1?'s':'')+' par le gérant, à analyser',v:'factures',cible:'faATraiter'});
+    if(aVe) it.push({n:aVe,txt:'Livraison'+(aVe>1?'s':'')+' à vérifier',v:'factures',cible:'faATraiter'});
+    if(sHT) it.push({n:sHT,txt:'Facture'+(sHT>1?'s':'')+' sans total HT',sous:'comptée'+(sHT>1?'s':'')+' 0 € dans le compte de résultat : à compléter avec « Modifier »',v:'factures',cible:'faRegistre'});
+    // prix d'achat
+    var noms={}; (SC.produits||[]).forEach(function(p){ noms[p.id]=p.nom; });
+    var aConf=[], sauts=[];
+    Object.keys(PRIX.produits||{}).forEach(function(id){ var x=PRIX.produits[id]; if(!x) return; if(x.aConfirmer) aConf.push(noms[id]||id);
+      var h=x.historique||[]; if(h.length>=2){ var a=h[h.length-2].prix, b=h[h.length-1].prix; if(a&&b&&(b>a*1.5||b<a/1.5)&&String(h[h.length-1].date||'')>=jour(new Date(Date.now()-30*864e5))) sauts.push((noms[id]||id)+' '+eur(a)+' → '+eur(b)); } });
+    if(aConf.length) it.push({n:aConf.length,txt:'Prix d’achat à confirmer',sous:esc(aConf.join(', ')),v:'factures',cible:'fiPrix'});
+    if(sauts.length) it.push({n:sauts.length,txt:'Prix d’achat qui ont fortement changé : à vérifier',sous:esc(sauts.join(' · ')),v:'factures',cible:'fiPrix'});
+    // fond pour la prochaine ouverture
+    var fd=r[3]&&r[3].exists?r[3].data():null;
+    if(fd&&fd.montant!=null&&fd.jour<jour()&&fd.montant<REGC.fondCaisse) it.push({n:'!',grave:1,txt:'Fond incomplet pour la prochaine ouverture : '+eur(fd.montant)+' au lieu de '+eur(REGC.fondCaisse),sous:'Si tu complètes avec l’argent d’une enveloppe, note-le dans Caisse et argent',v:'enveloppes',cible:'enApport'});
+    // enveloppes au coffre
+    if(r[1]&&r[2]){
+      var recup={}, retire={}; r[2].docs.forEach(function(d){ var dd=d.data(); if(dd.le) recup[d.id]=1; retire[d.id]=dd.retire||0; });
+      var cl={}; r[1].docs.forEach(function(d){ var c=d.data(); if(c.type==='cloture'&&(!cl[c.jour]||c.tsClient>cl[c.jour].tsClient)) cl[c.jour]=c; });
+      var nE=0, tE=0; Object.keys(cl).forEach(function(j){ var c=cl[j]; if(recup[j]) return; var fl2=c.fondLaisse!=null?c.fondLaisse:(c.fondPrevu!=null?c.fondPrevu:REGC.fondCaisse); var env=(c.enveloppe!=null?c.enveloppe:Math.max(0,c.montant-fl2))-(retire[j]||0); if(env>0){ nE++; tE+=env; } });
+      if(nE) it.push({n:nE,txt:'Enveloppe'+(nE>1?'s':'')+' à récupérer au coffre : '+eur(tE),v:'enveloppes',cible:'enListe'});
+    }
+    // équipe
+    var nP=r[0]?r[0].docs.length:0;
+    if(nP) it.push({n:nP,txt:'Proposition'+(nP>1?'s':'')+' du gérant pour le planning',v:'equipe',cible:'eqProps'});
+    // stock
+    if(PASTILLES['outil-stock']) it.push({n:PASTILLES['outil-stock'],txt:'Produits sous le seuil d’alerte',v:'stock',cible:'skEtat'});
+    if(SMV&&SMV.length&&!SMV.some(function(m){return m.type==='inventaire'})) it.push({n:'!',txt:'Premier inventaire pas encore fait',sous:'Le stock reste approximatif tant que la réserve et le comptoir n’ont pas été comptés une première fois (sur la tablette du gérant)',v:'stock',cible:'skEtat'});
+    var el=$('dATraiter'); if(!el) return;
+    if(!it.length){ el.className='card hidden'; el.innerHTML=''; return; }
+    it.sort(function(a,b){ return (b.grave||0)-(a.grave||0); });
+    el.className='card'; el.innerHTML='<h3 style="margin:0 0 4px">À traiter</h3>'+it.map(function(x){
+      return '<div class="at-row"><span class="at-n'+(x.grave?'':' w')+'">'+x.n+'</span><span class="l"><b>'+x.txt+'</b>'+(x.sous?'<br><span class="note">'+x.sous+'</span>':'')+'</span><button class="btn small sec" data-at="'+x.v+'|'+x.cible+'">Voir</button></div>';
+    }).join('');
+  });
+}
+document.addEventListener('click',function(e){ var b=e.target.closest('[data-at]'); if(!b) return; var p=b.getAttribute('data-at').split('|'); allerA(p[0],p[1]); });
 function ligneB(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
 var closJour=[], dernierR=null;
 function majCloture(){
   var el=$('dCloture'); if(!el) return;
   var r=dernierR||{cash:0,sorties:0};
-  var b=bilanJour(closJour,r.cash,r.sorties);
+  var b=bilanJour(closJour,r.cash,r.sorties,apportsDuJour(jour()));
   var h='';
   h+=ligneB('Ouverture',b.ouv?(b.ouv.ok?'fond complet à '+b.ouv.h:'<span style="color:var(--danger)">différence : '+eur(b.ouv.montant)+' compté à '+b.ouv.h+' (prévu '+eur(b.ouv.fondPrevu)+')</span>'):'<span style="color:var(--warn)">pas encore faite</span>');
   h+=ligneB('Fond de caisse',eur(b.fond));
   h+=ligneB('+ Ventes en espèces',eur(r.cash));
   if(r.sorties) h+=ligneB('− Sorties d’argent','−'+eur(r.sorties));
+  if(b.apport) h+=ligneB('+ Remis d’une enveloppe',eur(b.apport));
   h+=ligneB('= Attendu dans le tiroir',eur(b.attendu),'font-weight:700');
   if(b.clo){
     var gros=Math.abs(b.ecart)>REGC.seuilEcart;
@@ -1035,20 +1150,20 @@ function chargerHistorique(){
       '<div class="row"><span class="l">Menu · supplément · seules</span><b class="num">'+r.boMenu+' · '+r.boSupp+' · '+r.boSeules+'</b></div>'+
       '<div class="row"><span class="l">Part des clients avec boisson</span><b class="num">'+pct(r.clientsBoisson,r.nb)+'</b></div>';
     liste($('hProd'),r.prod); liste($('hExt'),r.ext,nomE);
-    db.collection('clotures').where('jour','>=',du).where('jour','<=',au).get().then(function(sc){
-      var parJour={}; sc.docs.forEach(function(d){ var c=d.data(); (parJour[c.jour]=parJour[c.jour]||[]).push(c); });
-      var jours=Object.keys(parJour).sort().reverse(), tot=0, n=0;
+  }).catch(function(e){ $('hCa').textContent='—'; toast('Lecture impossible ('+e.code+')'); });
+}
+// Clôtures, écarts et sorties d'argent (onglet Caisse et argent), sur la période des enveloppes
+function rendreCaissePeriode(parJour,r,du,au){
+      var jours=Object.keys(parJour).filter(function(j){ return j>=du&&j<=au; }).sort().reverse(), tot=0, n=0;
       $('hClo').innerHTML=jours.length?jours.map(function(j){
-        var b=bilanJour(parJour[j],r.cashJ[j],r.sortJ[j]);
+        var b=bilanJour(parJour[j],r.cashJ[j],r.sortJ[j],apportsDuJour(j));
         if(!b.clo) return '<div class="row"><span class="l">'+j+'</span><span class="note">pas de clôture</span></div>';
         tot+=b.ecart; n++;
         var gros=Math.abs(b.ecart)>REGC.seuilEcart;
         return '<div class="row"><span class="l">'+new Date(j+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})+' · compté '+eur(b.clo.montant)+' / attendu '+eur(b.attendu)+'</span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
       }).join('')+(n?'<div class="row"><span class="l"><b>Écart cumulé sur la période</b></span><b class="num">'+(tot>0?'+':'')+eur(tot)+'</b></div>':''):'<div class="empty">Aucune clôture sur la période.</div>';
-    }).catch(function(e){ $('hClo').innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
     var ks=Object.keys(r.sortiesMotifs).sort(function(a,b){return r.sortiesMotifs[b]-r.sortiesMotifs[a]});
     $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
-  }).catch(function(e){ $('hCa').textContent='—'; toast('Lecture impossible ('+e.code+')'); });
 }
 
 /* ---------- POINTAGES PAR BADGE (envoyés par la caisse) ---------- */
@@ -1316,7 +1431,7 @@ document.addEventListener('click',function(ev){
 });
 
 /* ---------- STOCK (propriétaire) ---------- */
-function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
+function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),db.collection('stock_mvts').where('jour','>=',jour(new Date(Date.now()-120*864e5))).get()]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&q>=0&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
 var SC={produits:[],fournisseurs:[]}, SMV=[], SC_SUPPR={};
 var PRODUITS_BASE=[
   {id:'baguettes',nom:'Baguettes',unite:'pièces'},{id:'hamburger',nom:'Hamburger',unite:'pièces',cond:'boîte',contenu:30},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
@@ -1362,8 +1477,10 @@ function qCond(q,p){ var b=qFmt(q,p&&p.unite); if(q==null||!p||!p.cond||!(p.cont
 function qFmt(q,u){ return (q==null?'?':String(Math.round(q*100)/100).replace('.',','))+' '+(u||''); }
 function rendreStockP(){
   var act=SC.produits.filter(function(p){return p.actif!==false}), bas=0;
-  var h=act.map(function(p){ var q=stockP(p.id), lo=q!=null&&p.seuil!=null&&q<=p.seuil; if(lo) bas++;
-    return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+qCond(q,p)+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
+  var sansInv=!SMV.some(function(m){return m.type==='inventaire'});
+  var h=act.map(function(p){ var q=stockP(p.id), neg=q!=null&&q<0, lo=q!=null&&!neg&&p.seuil!=null&&q<=p.seuil; if(lo) bas++;
+    return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+(neg?'<span class="note" title="Le calcul donne '+esc(qCond(q,p))+' : des livraisons n’ont pas été notées ou l’inventaire de départ manque">à compter</span>':qCond(q,p))+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
+  if(sansInv&&act.length) h='<p class="note" style="margin:0 0 8px;color:var(--warn)"><b>En attente du premier inventaire.</b> Tant que la réserve et le comptoir n’ont pas été comptés une première fois (tablette du gérant → Stock → Inventaire), les quantités ne sont qu’une estimation.</p>'+h;
   $('skEtat').innerHTML=act.length?h:'<div class="empty">Ajoute d’abord tes produits et fournisseurs plus bas.</div>';
   $('skResume').textContent=act.length?(bas?bas+' produit'+(bas>1?'s':'')+' sous le seuil':'Aucun produit sous le seuil'):'';
   mettrePastille('outil-stock',bas);
@@ -1379,7 +1496,7 @@ function rendreMvts(){
     return '<div class="row"><span class="t num">'+esc(m.jour.slice(5))+' '+esc(m.h||'')+'</span><span class="l">'+tag+four+' '+txt+(m.motif?' · '+esc(m.motif):'')+(m.note?' <span class="note">('+esc(m.note)+')</span>':'')+'</span><b class="num">'+(m.type==='perte'&&val?'−'+eur(val):'')+'</b></div>';
   });
   $('skMvts').innerHTML=lignes.length?lignes.slice(0,80).join(''):'<div class="empty">Aucun mouvement sur les 30 derniers jours.</div>';
-  $('skPertes').innerHTML='<div class="row"><span class="l">Pertes cette semaine</span><b class="num" style="color:var(--danger)">'+eur(pertesSem)+'</b></div><div class="row"><span class="l">Pertes ce mois-ci</span><b class="num" style="color:var(--danger)">'+eur(pertesMois)+'</b></div><p class="note">Valeur calculée avec les prix d’achat de l’onglet Finances.</p>';
+  $('skPertes').innerHTML='<div class="row"><span class="l">Pertes cette semaine</span><b class="num" style="color:var(--danger)">'+eur(pertesSem)+'</b></div><div class="row"><span class="l">Pertes ce mois-ci</span><b class="num" style="color:var(--danger)">'+eur(pertesMois)+'</b></div><p class="note">Valeur calculée avec les prix d’achat (onglet Achats et coûts).</p>';
 }
 function rendreCommandesP(cmds){
   $('skCmds').innerHTML=cmds.length?cmds.map(function(c,i){ var f=fourP(c.fournisseur);
@@ -1398,7 +1515,7 @@ function lireConfigStock(){
   SC.produits=Array.prototype.map.call(document.querySelectorAll('#tProd tr[data-i]'),function(tr){ var o=SC.produits[parseInt(tr.getAttribute('data-i'),10)]||{}; var g=function(k){var el=tr.querySelector('[data-k="'+k+'"]');return el.type==='checkbox'?el.checked:el.value.trim()}; return {id:o.id||('p'+Date.now()+Math.floor(Math.random()*1000)),nom:g('nom'),unite:g('unite'),cond:g('cond')||null,contenu:num(g('contenu')),seuil:num(g('seuil')),cible:num(g('cible')),fournisseur:g('fournisseur')||null,actif:g('actif')}; }).filter(function(p){return p.nom});
 }
 document.addEventListener('click',function(ev){
-  var b=ev.target.closest('button'); if(!b || !$('v-stock') || $('v-stock').className.indexOf('on')<0) return;
+  var b=ev.target.closest('button'); if(!b || !(b.id==='skSave' || b.closest('#skConfig'))) return;
   if(b.id==='skAddF'){ lireConfigStock(); SC.fournisseurs.push({id:'',nom:'Nouveau fournisseur'}); rendreConfigStock(); }
   if(b.id==='skAddP'){ lireConfigStock(); SC.produits.push({id:'',nom:'Nouveau produit',actif:true}); rendreConfigStock(); }
   if(b.hasAttribute('data-delf')){ if(!confirm('Supprimer ce fournisseur ?')) return; lireConfigStock(); var fx=SC.fournisseurs[parseInt(b.getAttribute('data-delf'),10)]; if(fx) SC_SUPPR[fx.id]=1; SC.fournisseurs.splice(parseInt(b.getAttribute('data-delf'),10),1); rendreConfigStock(); }
@@ -1564,8 +1681,8 @@ function majFoodCostDirect(evs){
   var vc=valeurConso(conso), caHT=ca/(1+(REGC.tvaVentes||6)/100), fc=caHT&&vc.v?vc.v*100/caHT:null;
   el.innerHTML=fc!=null?'<div class="big num" style="font-size:42px;font-weight:800;color:'+(fc<33?'var(--ok)':fc<=40?'var(--warn)':'var(--danger)')+'">'+Math.round(fc)+' %</div>'+
     '<div class="row"><span class="l">Matière consommée par les ventes</span><b class="num">'+eur(vc.v)+'</b></div><div class="row"><span class="l">CA HT du jour</span><b class="num">'+eur(caHT)+'</b></div>'+
-    '<p class="note">Food cost théorique, mis à jour à chaque vente'+(vc.manque?' (certains prix d’achat manquent : voir Finances)':'')+(ratios.frites?'':' · frites pas encore comptées (moyenne en apprentissage)')+'. Le réel se calcule à chaque inventaire (onglet Stock).</p>'
-    :'<div class="empty">'+(ca?'Prix d’achat manquants : complète-les dans Finances.':'Pas encore de vente aujourd’hui.')+'</div>';
+    '<p class="note">Food cost théorique, mis à jour à chaque vente'+(vc.manque?' (certains prix d’achat manquent : voir Achats et coûts)':'')+(ratios.frites?'':' · frites pas encore comptées (moyenne en apprentissage)')+'. Le réel se calcule à chaque inventaire (onglet Stock).</p>'
+    :'<div class="empty">'+(ca?'Prix d’achat manquants : complète-les dans Achats et coûts.':'Pas encore de vente aujourd’hui.')+'</div>';
 }
 
 /* ---------- NOTES DU GÉRANT (dans « En direct ») ---------- */
@@ -1618,7 +1735,7 @@ function chargerAssistant(){
   }).catch(function(){ ASS.briefing=BRIEFING_DEFAUT; });
 }
 function appelRelais(chemin,corps){
-  if(!ASS.relais) return Promise.reject(new Error('Adresse du relais non réglée (Réglages caisse → Assistant)'));
+  if(!ASS.relais) return Promise.reject(new Error('Adresse du relais non réglée (⚙ Paramètres → Assistant IA)'));
   return auth.currentUser.getIdToken().then(function(t){
     return fetch(ASS.relais.replace(/\/$/,'')+chemin,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(corps||{})});
   }).then(function(r){ return r.json().then(function(d){ if(!r.ok||d.erreur) throw new Error(d.erreur||('Erreur '+r.status)); return d; }); });
@@ -1852,6 +1969,21 @@ function chargerFactures(){
 function n2(v){ v=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(v)?0:Math.round(v*100)/100; }
 function e2(v){ return eur(Math.round(n2(v)*100)); }
 function norm(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+// nom court d'un fournisseur : \u00ab Action Belgium BV/SRL (magasin Action Couillet) - TVA \u2026 \u00bb \u2192 \u00ab Action \u00bb
+function nomCourtF(t){
+  var s=String(t||'').split(/ \(| - | \u2013 |,/)[0];
+  s=s.replace(/\b(BV\/SRL|SRL\/BV|BVBA|SPRL|SRL|S\.A\.|SA|NV|BV|Belgium)\b/gi,'').replace(/\s+/g,' ').trim();
+  return s||String(t||'');
+}
+function cleF(t){ return norm(nomCourtF(t)).split(' ')[0]||''; }
+// factures valid\u00e9es en double : m\u00eame fournisseur (nom court) et m\u00eame num\u00e9ro ; la plus ancienne est gard\u00e9e
+function facturesDoublons(){
+  var vu={}, dbl=[];
+  (FAC.liste||[]).filter(function(x){ return x.statut==='validee' && x.numero; }).sort(function(a,b){ return (a.maj||0)-(b.maj||0); }).forEach(function(x){
+    var k=cleF(x.fournisseur)+'|'+norm(x.numero); if(vu[k]) dbl.push(x); else vu[k]=x; });
+  return dbl;
+}
+function sansHT(x){ return x.statut==='validee' && !(parseFloat(x.totalHT)>0) && parseFloat(x.totalTTC)>0; }
 
 /* ---- lecture des fichiers ---- */
 function compresserImage(fichier){
@@ -1922,7 +2054,7 @@ function controlesFacture(f,id){
   var tvaCalc=f.tva.reduce(function(s,x){return s+n2(x.base)*n2(x.taux)/100},0);
   if(f.tva.length) c.push(Math.abs(tvaCalc-f.totalTVA)<=0.05?{g:0,t:'TVA recalculée : correcte'}:{g:3,t:'TVA : le calcul donne '+e2(tvaCalc)+' au lieu de '+e2(f.totalTVA)});
   c.push(Math.abs(n2(f.totalHT)+n2(f.totalTVA)-n2(f.totalTTC))<=0.05?{g:0,t:'HT + TVA = TTC : correct'}:{g:3,t:'HT + TVA ('+e2(n2(f.totalHT)+n2(f.totalTVA))+') ≠ TTC ('+e2(f.totalTTC)+')'});
-  var doublon=FAC.liste.filter(function(x){ return x.__id!==id && x.statut!=='a_analyser' && norm(x.fournisseur)===norm(f.fournisseur) && norm(x.numero)===norm(f.numero) && f.numero; });
+  var doublon=FAC.liste.filter(function(x){ return x.__id!==id && x.statut!=='a_analyser' && cleF(x.fournisseur)===cleF(f.fournisseur) && norm(x.numero)===norm(f.numero) && f.numero; });
   c.push(doublon.length?{g:3,t:'Déjà enregistrée le '+doublon[0].date+' : possible doublon'}:{g:0,t:'Pas de doublon'});
   // hausses de prix : même fournisseur, même désignation, facture précédente
   var anciennes=FAC.liste.filter(function(x){ return x.__id!==id && x.statut==='validee' && norm(x.fournisseur)===norm(f.fournisseur); }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
@@ -1966,7 +2098,9 @@ function ouvrirVerification(f,piece,factureId){
     $('faValider').onclick=function(){
       var o=lire(); if(!o.fournisseur||!o.date){ alert('Le fournisseur et la date sont obligatoires.'); return; }
       var ctrl=controlesFacture(o,FAC.brouillon.id), hausses=ctrl.filter(function(x){return x.hausse}).length, alertes=ctrl.filter(function(x){return x.g===3}).length;
-      if(alertes && !confirm('Certaines vérifications ont échoué. Enregistrer quand même ?')) return;
+      var dbl=ctrl.filter(function(x){ return /possible doublon/.test(x.t); })[0];
+      if(dbl && !confirm('Attention : cette facture semble déjà enregistrée ('+dbl.t.replace(' : possible doublon','')+').\nL’enregistrer une deuxième fois ?')) return;
+      if(alertes>(dbl?1:0) && !confirm('Certaines vérifications ont échoué. Enregistrer quand même ?')) return;
       $('faValider').disabled=true;
       var ref=FAC.brouillon.id?db.collection('factures').doc(FAC.brouillon.id):db.collection('factures').doc();
       var doc={fournisseur:o.fournisseur,numero:o.numero,date:o.date,echeance:o.echeance||'',mois:String(o.date).slice(0,7),lignes:o.lignes,tva:o.tva,totalHT:o.totalHT,totalTVA:o.totalTVA,totalTTC:o.totalTTC,source:o.source||'manuel',statut:'validee',alertes:alertes,hausses:hausses,piece:!!FAC.brouillon.piece||!!(FAC.brouillon.id&&FAC.liste.some(function(x){return x.__id===FAC.brouillon.id&&x.piece})),maj:Date.now()};
@@ -1989,7 +2123,8 @@ function rendreRegistre(){
   var liste=FAC.liste.filter(function(x){ return x.statut==='validee' && x.mois===mois; }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
   var ht=0, tva=0, ttc=0, parTaux={}, hausses=0;
   liste.forEach(function(x){ ht+=n2(x.totalHT); tva+=n2(x.totalTVA); ttc+=n2(x.totalTTC); hausses+=x.hausses||0; (x.tva||[]).forEach(function(t){ parTaux[t.taux]=(parTaux[t.taux]||0)+n2(t.montant); }); });
-  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.fournisseur)+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+e2(x.totalHT)+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
+  var dblIds={}; facturesDoublons().forEach(function(x){ dblIds[x.__id]=1; });
+  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="tag tir" title="Le total HT n’a pas été lu : cette facture compte pour 0 € dans le compte de résultat. Touche Modifier pour le compléter.">à compléter</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
   $('faRegistre').innerHTML=liste.length?'<div class="scroll"><table class="table"><tr><th>Date</th><th>Fournisseur</th><th>N°</th><th>HT</th><th>TVA</th><th>TTC</th><th>Contrôles</th><th></th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune facture enregistrée pour ce mois.</div>';
   // TVA collectée sur les ventes (estimation au taux réglé) puis TVA à payer
   var taux=(REGC.tvaVentes!=null?REGC.tvaVentes:6), du=mois+'-01', au=mois+'-31';
@@ -2312,8 +2447,8 @@ function rafraichirBlocsDuJour(){
 
 /* ---------- pages et navigation ---------- */
 var PASTILLES={};
-var ONGLETS_PASTILLE={'outil-equipe':['equipe','Équipe'],'outil-stock':['stock','Stock'],'outil-factures':['factures','Factures']};
-function mettrePastille(type,n){ PASTILLES[type]=n||0; var o=ONGLETS_PASTILLE[type]; if(o){ var bt=document.querySelector('[data-v="'+o[0]+'"]'); if(bt) bt.textContent=o[1]+(n?' ('+n+')':''); } }
+var ONGLETS_PASTILLE={'outil-equipe':['equipe','Équipe'],'outil-stock':['stock','Stock'],'outil-factures':['factures','Achats et coûts']};
+function mettrePastille(type,n){ PASTILLES[type]=n||0; if(typeof majATraiter==='function') majATraiter(); var o=ONGLETS_PASTILLE[type]; if(o){ var bt=document.querySelector('[data-v="'+o[0]+'"]'); if(bt) bt.textContent=o[1]+(n?' ('+n+')':''); } }
 function pastillePage(p){ var t=0; p.blocs.forEach(function(b){ t+=PASTILLES[b.type]||0; }); return t; }
 function pageCourante(){ for(var i=0;i<MP.pages.length;i++) if(MP.pages[i].id===MP.courante) return MP.pages[i]; return MP.pages[0]; }
 function construireNav(){
