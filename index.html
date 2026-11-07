@@ -194,6 +194,12 @@ details.replie>summary::-webkit-details-marker{display:none}
 .at-row .l{flex:1}
 .at-n{display:inline-block;min-width:24px;text-align:center;font-weight:800;border-radius:8px;padding:1px 6px;background:#F7E3E1;color:var(--danger)}
 .at-n.w{background:#FBF0DC;color:var(--warn)}
+details.arg>summary{list-style:none}
+details.arg>summary::-webkit-details-marker{display:none}
+details.arg>summary .l b:before{content:'▸ ';color:var(--ink-soft)}
+details.arg[open]>summary .l b:before{content:'▾ '}
+.arg-det{padding:0 0 8px 18px}
+.arg-det .row{font-size:14px}
 .ass-fab{display:none}
 body.connecte .ass-fab{display:block}
 .journal-defile{max-height:460px;overflow-y:auto;border-top:1px solid var(--surface2)}
@@ -326,7 +332,6 @@ body.connecte .ass-fab{display:block}
         <div class="inline"><button class="btn prim" id="apGo">Enregistrer</button><span class="note" id="apEtat"></span></div>
       </div>
       <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Clôtures et écarts de caisse</h3><div id="hClo"><div class="empty">Chargement…</div></div></div>
-      <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Sorties d’argent du tiroir</h3><div id="hSor"><div class="empty">Chargement…</div></div></div>
     </section>
 
     <!-- ÉQUIPE -->
@@ -364,7 +369,9 @@ body.connecte .ass-fab{display:block}
     <!-- FACTURES -->
     <section class="view" id="v-factures">
       <h2>Achats et coûts</h2>
-      <h3 style="margin-top:0">Factures</h3>
+      <div class="inline" style="justify-content:space-between;margin:0 0 10px"><h3 style="margin:0">L’argent du mois</h3><label class="note">Mois <input class="in" type="month" id="fiMois" style="width:auto"></label></div>
+      <div class="card" id="fiResultat"><div class="empty">Calcul en cours…</div></div>
+      <h3>Factures</h3>
       <div class="card form">
         <b>Ajouter une facture</b>
         <p class="note">Une photo, un PDF ou un fichier Peppol (XML). Les photos et PDF sont lus par l’IA ; les fichiers Peppol sont lus directement, sans IA. Tu vérifies toujours avant d’enregistrer.</p>
@@ -380,11 +387,6 @@ body.connecte .ass-fab{display:block}
       <button class="btn small sec" id="fiReprendre" style="margin-top:10px">Reprendre les prix de toutes les factures</button>
       <h3>Marge de chaque produit vendu</h3>
       <div class="card" id="fiMarges"><div class="empty">Chargement…</div></div>
-      <h3>Compte de résultat</h3>
-      <div class="inline" style="margin-bottom:10px"><label class="note">Mois <input class="in" type="month" id="fiMois" style="width:auto"></label></div>
-      <div class="card" id="fiResultat"></div>
-      <h3>Dépenses diverses du mois</h3>
-      <div class="card" id="fiDepenses"><div class="empty">Chargement…</div></div>
       <h3>TVA du mois</h3>
       <div class="card" id="fiTva"></div>
       <p class="note" style="margin-top:18px">Charges fixes mensuelles : dans ⚙ Paramètres.</p>
@@ -1228,7 +1230,7 @@ function rendreCaissePeriode(parJour,r,du,au){
         return '<div class="row"><span class="l">'+new Date(j+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})+' · compté '+eur(b.clo.montant)+' / attendu '+eur(b.attendu)+'</span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
       }).join('')+(n?'<div class="row"><span class="l"><b>Écart cumulé sur la période</b></span><b class="num">'+(tot>0?'+':'')+eur(tot)+'</b></div>':''):'<div class="empty">Aucune clôture sur la période.</div>';
     var ks=Object.keys(r.sortiesMotifs).sort(function(a,b){return r.sortiesMotifs[b]-r.sortiesMotifs[a]});
-    $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
+    if($('hSor')) $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
 }
 
 /* ---------- POINTAGES PAR BADGE (envoyés par la caisse) ---------- */
@@ -1299,7 +1301,7 @@ function initEquipe(){
   Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get(),chargerBadges()]).then(function(r){
     EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
     var pv=r[1].exists?(r[1].data().membres||{}):{};
-    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
+    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
   }).catch(function(){}).then(function(){
     rendreMembres(); semP=lundiP(); chargerPlanningP(); chargerPropositions(); chargerHeures('semaine');
   });
@@ -1321,7 +1323,8 @@ function editerMembre(i){
     '<div class="inline"><label class="f" style="flex:1">Nom<input class="in" id="emNom" value="'+esc(m.nom)+'"></label>'+
     '<label class="f">Fonction<select class="in" id="emRole"><option value="proprietaire" '+(m.role==='proprietaire'?'selected':'')+'>Propriétaire</option><option value="gerant" '+(m.role==='gerant'?'selected':'')+'>Gérant</option><option value="etudiant" '+(m.role==='etudiant'?'selected':'')+'>Étudiant</option><option value="employe" '+(m.role==='employe'?'selected':'')+'>Employé</option></select></label></div>'+
     '<div class="inline"><label class="f">Contrat<input class="in" id="emContrat" value="'+esc(m.contrat||'')+'" placeholder="CDI, CDD, étudiant…"></label><label class="f">Heures / semaine<input class="in px" id="emH" inputmode="numeric" value="'+esc(m.heuresSemaine||'')+'"></label>'+
-    '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(m.coutHoraire)+'"></label></div>'+
+    '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(m.coutHoraire)+'"></label>'+
+    '<label class="f">Payé<select class="in" id="emPaie"><option value="">— à préciser —</option><option value="especes" '+(m.paiement==='especes'?'selected':'')+'>en espèces</option><option value="virement" '+(m.paiement==='virement'?'selected':'')+'>par virement</option></select></label></div>'+
     '<label class="f" id="emSoldeL">Heures étudiant déjà utilisées cette année chez d’autres employeurs (solde de départ, voir Student@work)<input class="in px" id="emSolde" inputmode="numeric" value="'+esc(m.soldeDepart||0)+'"></label>'+
     '<label class="switch"><input type="checkbox" id="emActif" '+(m.actif!==false?'checked':'')+'>Fait partie de l’équipe actuelle</label>'+
     '<div class="inline"><button class="btn prim" id="emOk">Enregistrer</button><button class="btn sec" id="emNon">Annuler</button></div>';
@@ -1329,10 +1332,10 @@ function editerMembre(i){
   $('emNon').onclick=function(){ f.className='hidden'; };
   $('emOk').onclick=function(){
     m.nom=$('emNom').value.trim(); if(!m.nom){ alert('Le nom est obligatoire.'); return; }
-    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.actif=$('emActif').checked;
+    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.paiement=$('emPaie').value; m.actif=$('emActif').checked;
     if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
     var pub=EQ.membres.map(function(x){ return {id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; });
-    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0}; });
+    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||''}; });
     Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
   };
   f.scrollIntoView({behavior:'smooth'});
@@ -2771,25 +2774,117 @@ function rendreResultat(){
     facturesSnap(),
     pointagesFusion(du,au),
     db.collection('config').doc('equipe_prive').get(),
-    chargerDepenses(mois).catch(function(){ return []; })
+    chargerDepenses(mois).catch(function(){ return []; }),
+    db.collection('config').doc('equipe').get()
   ]).then(function(r){
-    rendreDepenses(); var divers=DEP.liste.reduce(function(t,x){ return t+x.montant; },0);
-    var R=analyser(r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'})), caTTC=R.ca, caHT=caTTC/(1+tva/100), joursV=Object.keys(R.jours).length;
-    var achats=0, tvaRec=0; r[1].docs.forEach(function(d){ var f=d.data(); if((f.statut==='validee'||f.statut==='a_verifier')&&String(f.mois||String(f.date||f.jour||'').slice(0,7))===mois){ achats+=Math.round(parseFloat(f.totalHT||0)*100); tvaRec+=Math.round(parseFloat(f.totalTVA||0)*100); } });
-    var pv=r[3].exists?(r[3].data().membres||{}):{}, pts=r[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}), parMJ={}, refs={};
-    pts.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
-    pts.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
-    var perso=0; Object.keys(parMJ).forEach(function(k){ var m=k.split('|')[0], x=intervalles(parMJ[k],k.split('|')[1]<jour()); perso+=x.min/60*((pv[m]||{}).coutHoraire||0); });
-    var fixes=FIN.charges.reduce(function(s,c){return s+(c.montant||0)},0), res=caHT-achats-perso-fixes-divers, tauxMarge=caHT?(caHT-achats)/caHT:0;
-    var seuilMois=tauxMarge>0?(perso+fixes+divers)/tauxMarge:null, jOuv=joursV||22;
-    function l(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
-    $('fiResultat').innerHTML=l('Chiffre d’affaires HT ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)',eur(caHT))+l('− Achats (factures HT)',eur(achats))+l('− Personnel (pointages × coûts horaires)',eur(perso))+l('− Charges fixes',eur(fixes))+l('− Dépenses diverses',eur(divers))+
-      l('= Résultat estimé','<span style="color:'+(res>=0?'var(--ok)':'var(--danger)')+'">'+(res>=0?'+':'')+eur(res)+'</span>','font-weight:800')+
-      l('Seuil de rentabilité',seuilMois!=null?'≈ '+eur(seuilMois/jOuv*(1+tva/100))+' de CA TTC par jour':'—')+
-      '<p class="note">Estimation de gestion : les achats ne comptent que les factures enregistrées, et le personnel les heures pointées. Ton comptable reste la référence.</p>';
+    var evs=r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
+    var R=analyser(evs), caTTC=R.ca, caHT=caTTC/(1+tva/100), joursV=Object.keys(R.jours).length;
+    var A=argentDuMois({mois:mois,evs:evs,factures:r[1].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }),pointages:r[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}),
+      prive:r[3].exists?(r[3].data().membres||{}):{},membres:r[5].exists?(r[5].data().membres||[]):[],depenses:DEP.liste,fixes:FIN.charges});
+    rendreArgent(A,R,caHT,joursV,tva);
     var collectee=caTTC-caHT;
-    $('fiTva').innerHTML=l('TVA collectée sur les ventes (estimation à '+String(tva).replace('.',',')+' %)',eur(collectee))+l('TVA récupérable (factures du mois)',eur(tvaRec))+l('TVA à payer estimée',eur(collectee-tvaRec),'font-weight:800')+'<p class="note">Estimation pour ton suivi : la déclaration officielle se fait avec ton comptable.</p>';
+    function l(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
+    $('fiTva').innerHTML=l('TVA collectée sur les ventes (estimation à '+String(tva).replace('.',',')+' %)',eur(collectee))+l('TVA récupérable (factures du mois)',eur(A.tvaRec))+l('TVA à payer estimée',eur(collectee-A.tvaRec),'font-weight:800')+'<p class="note">Estimation pour ton suivi : la déclaration officielle se fait avec ton comptable.</p>';
   }).catch(function(e){ $('fiResultat').innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
+}
+
+/* ---------- L'ARGENT DU MOIS : tout ce qui sort du même cash, rangé par nature, sans double compte ---------- */
+var NATURES=[{k:'marchandises',t:'Marchandises'},{k:'emballages',t:'Emballages et entretien'},{k:'personnel',t:'Personnel'},{k:'fixes',t:'Charges fixes'},{k:'autres',t:'Autres'}];
+var NATURE_SORTIE={'baguettes':'marchandises','viande':'marchandises','boissons':'marchandises','legumes':'marchandises','emballages':'emballages','produits d entretien':'emballages','avance sur salaire':'personnel'};
+var NATURE_DEPENSE={'courses magasin':'marchandises','emballages':'emballages','entretien':'emballages','salaire':'personnel'};
+function natureTexte(t){ var n=norm(t); if(/salaire|avance|paie/.test(n)) return 'personnel'; if(/emballage|sac|serviette|entretien|nettoy|poubelle/.test(n)) return 'emballages'; if(/boisson|baguette|pain|viande|frite|legume|sauce|fromage|cheddar|course|canette|coca|eau|oeuf|salade|tomate|oignon/.test(n)) return 'marchandises'; return null; }
+// à qui revient une avance ou un salaire : le prénom écrit dans le motif ou la note
+function membreDuTexte(t,membres){ var n=' '+norm(t)+' '; for(var i=0;i<membres.length;i++){ var p=norm(membres[i].nom).split(' ')[0]; if(p&&n.indexOf(' '+p+' ')>=0) return membres[i]; } return null; }
+function argentDuMois(o){
+  var N={}; NATURES.forEach(function(x){ N[x.k]={total:0,lignes:[]}; });
+  function ajoute(k,l){ N[k].total+=l.montant; N[k].lignes.push(l); }
+  var membres=o.membres.map(function(m){ var x=o.prive[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif!==false,paiement:x.paiement||'',coutHoraire:x.coutHoraire||0}; });
+  // 1. factures du mois (sans les doubles)
+  var dbl={}; facturesDoublons().forEach(function(x){ dbl[x.__id]=1; });
+  var facts=o.factures.filter(function(f){ return (f.statut==='validee'||f.statut==='a_verifier') && !dbl[f.__id] && String(f.mois||String(f.date||f.jour||'').slice(0,7))===o.mois; });
+  var tvaRec=0, achatsHT=0;
+  facts.forEach(function(f){ var ttc=Math.round(n2(f.totalTTC)*100), ht=Math.round(n2(f.totalHT)*100); if(!ttc) ttc=ht; if(!ht) ht=Math.round(ttc/(1+(REGC.tvaVentes||6)/100)); tvaRec+=Math.round(n2(f.totalTVA)*100); achatsHT+=ht;
+    ajoute('marchandises',{src:'facture',montant:ttc,txt:nomCourtF(f.fournisseur)+(f.numero?' n° '+f.numero:''),jour:f.date||f.jour,id:f.__id}); });
+  // une sortie de caisse ou une dépense du même jour et du même montant qu'une facture = le même achat : compté une seule fois
+  var dejaFacture={}; facts.forEach(function(f){ dejaFacture[String(f.date||f.jour)+'|'+Math.round(n2(f.totalTTC)*100)]=f; });
+  function estFacture(j,m){ for(var d=-5;d<=5;d++) if(dejaFacture[j+'|'+(m+d)]) return dejaFacture[j+'|'+(m+d)]; return null; }
+  var avancesInfo=[];
+  function personnel(src,montant,txt,j,extra){
+    var m=membreDuTexte(txt,membres);
+    if(m&&m.paiement==='virement'){ avancesInfo.push({src:src,montant:montant,txt:txt,jour:j,nom:m.nom}); return; } // acompte déjà compris dans son salaire
+    ajoute('personnel',Object.assign({src:src,montant:montant,txt:txt,jour:j,sansNom:!m},extra||{}));
+  }
+  // 2. sorties d'argent du tiroir
+  var annul={}; o.evs.forEach(function(x){ if(x.type==='annulation') annul[x.ref]=1; });
+  o.evs.forEach(function(x){ if(x.type!=='tiroir'||!x.sortie||x.mixte||!x.montant) return;
+    var txt=String(x.motif||x.categorie||'').replace(/^Sortie : /,''), f=estFacture(x.jour,x.montant);
+    if(f){ N.marchandises.lignes.forEach(function(l){ if(l.id===f.__id) l.payeCaisse=true; }); return; }
+    var k=NATURE_SORTIE[norm(x.categorie)]||natureTexte(txt)||'autres';
+    if(k==='personnel') personnel('caisse',x.montant,txt,x.jour); else ajoute(k,{src:'caisse',montant:x.montant,txt:txt,jour:x.jour}); });
+  // 3. dépenses notées sur le téléphone
+  o.depenses.forEach(function(x){ var txt=x.categorie+(x.note?' · '+x.note:''), f=estFacture(x.jour,x.montant);
+    if(f) return;
+    var k=NATURE_DEPENSE[norm(x.categorie)]||natureTexte(x.note)||natureTexte(x.categorie)||'autres';
+    var extra={dep:x};
+    if(k==='personnel') personnel('depense',x.montant,txt,x.jour,extra); else ajoute(k,Object.assign({src:'depense',montant:x.montant,txt:txt,jour:x.jour},extra)); });
+  // 4. personnel payé par virement : heures pointées × coût horaire
+  var parMJ={}, refs={};
+  o.pointages.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
+  o.pointages.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
+  var minParM={}; Object.keys(parMJ).forEach(function(k){ var id=k.split('|')[0], x=intervalles(parMJ[k],k.split('|')[1]<jour()); minParM[id]=(minParM[id]||0)+x.min; });
+  membres.forEach(function(m){ if(m.paiement!=='virement') return; var mn=minParM[m.id]||0; if(!mn) return;
+    ajoute('personnel',{src:'heures',montant:Math.round(mn/60*m.coutHoraire),txt:m.nom+' : '+(Math.round(mn/6)/10).toString().replace('.',',')+' h × '+eur(m.coutHoraire)+(m.coutHoraire?'':' (coût horaire à régler dans Équipe)')}); });
+  // 5. charges fixes
+  (o.fixes||[]).forEach(function(c){ if(c.montant) ajoute('fixes',{src:'fixe',montant:c.montant,txt:c.nom}); });
+  var sorti=0; NATURES.forEach(function(x){ sorti+=N[x.k].total; });
+  return {N:N,sorti:sorti,tvaRec:tvaRec,achatsHT:achatsHT,avancesInfo:avancesInfo,membresSansMode:membres.filter(function(m){ return !m.paiement&&m.actif&&m.role!=='proprietaire'; }).map(function(m){ return m.nom; }),dep:o.depenses};
+}
+var SRC_TAG={facture:'<span class="tag carte">facture</span>',caisse:'<span class="tag tir">caisse</span>',depense:'<span class="tag" style="background:#ECE6F7;color:#5B3E96">dépense</span>',heures:'<span class="tag">heures</span>',fixe:'<span class="tag">fixe</span>'};
+function rendreArgent(A,R,caHT,joursV,tva){
+  var N=A.N, reste=R.ca-A.sorti, fc=R.ca?N.marchandises.total*100/R.ca:null;
+  function kpi(t,v,s,c){ return '<div class="kpi"><span>'+t+'</span><b class="num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</b><small>'+(s||'&nbsp;')+'</small></div>'; }
+  var h='<div class="grid kpis" style="margin-bottom:12px">'+
+    kpi('Rentré (ventes)',eur(R.ca),'espèces '+eur(R.cash)+' · carte '+eur(R.carte))+
+    kpi('Sorti',eur(A.sorti),'tout compris')+
+    kpi('Reste',(reste>=0?'+':'')+eur(reste),N.fixes.total?'après charges fixes':'charges fixes pas encore notées',reste>=0?'var(--ok)':'var(--danger)')+
+    kpi('Food cost réel',fc!=null?fc.toFixed(1).replace('.',',')+' %':'—','marchandises ÷ ventes · cible 28 à 33 %',fc!=null&&fc>33?'var(--warn)':'var(--ok)')+'</div>';
+  NATURES.forEach(function(x){ var n=N[x.k]; var srcs={}; n.lignes.forEach(function(l){ srcs[l.src]=1; });
+    var vide=!n.lignes.length;
+    h+='<details class="arg"'+(vide?'':'')+'><summary class="row" style="cursor:pointer"><span class="l"><b>'+x.t+'</b> '+Object.keys(srcs).map(function(s){ return SRC_TAG[s]; }).join(' ')+'</span><b class="num"'+(vide?' style="color:var(--ink-soft)"':'')+'>'+(vide?(x.k==='fixes'?'à compléter dans ⚙ Paramètres':'—'):eur(n.total))+'</b></summary>'+
+      (vide?'':'<div class="arg-det">'+lignesArgent(n.lignes)+'</div>')+'</details>';
+  });
+  if(A.avancesInfo.length) h+='<p class="note">Avances déjà comprises dans un salaire payé par virement (pas comptées deux fois) : '+A.avancesInfo.map(function(a){ return esc(a.nom)+' '+eur(a.montant); }).join(' · ')+'</p>';
+  if(A.membresSansMode.length) h+='<p class="note" style="color:var(--warn)">Indique dans Équipe si ces personnes sont payées en espèces ou par virement : '+esc(A.membresSansMode.join(', '))+'. En attendant, seul l’argent réellement sorti pour elles est compté.</p>';
+  var sansNom=N.personnel.lignes.filter(function(l){ return l.sansNom&&l.src!=='heures'; });
+  if(sansNom.length) h+='<p class="note">'+sansNom.length+' paiement(s) de personnel sans prénom reconnu : compté(s) comme payé(s) en espèces.</p>';
+  // pour le comptable
+  var autresHT=A.sorti-N.marchandises.lignes.filter(function(l){return l.src==='facture'}).reduce(function(t,l){return t+l.montant},0);
+  var resHT=caHT-A.achatsHT-autresHT, tauxMarge=caHT?(caHT-N.marchandises.total/(1+tva/100))/caHT:0, fixesEtc=N.personnel.total+N.fixes.total+N.emballages.total+N.autres.total;
+  var seuil=tauxMarge>0?fixesEtc/tauxMarge:null, jOuv=joursV||22;
+  h+='<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:6px">'+
+    '<div class="row"><span class="l note">Pour le comptable : résultat estimé HT ('+joursV+' jour'+(joursV>1?'s':'')+' de vente)</span><b class="num" style="color:'+(resHT>=0?'var(--ok)':'var(--danger)')+'">'+(resHT>=0?'+':'')+eur(resHT)+'</b></div>'+
+    '<div class="row"><span class="l note">Seuil de rentabilité</span><b class="num">'+(seuil!=null?'≈ '+eur(seuil/jOuv*(1+tva/100))+' de ventes par jour':'—')+'</b></div></div>';
+  // dépenses du téléphone : remboursements, export, catégories
+  var aRemb=A.dep.filter(function(x){ return x.aRembourser&&!x.rembourse; }).reduce(function(t,x){ return t+x.montant; },0);
+  var url=location.href.replace(/[^\/]*([?#].*)?$/,'')+'depense.html';
+  h+=(aRemb?'<div class="row"><span class="l">À te rembourser (payé avec ton argent perso)</span><b class="num" style="color:var(--warn)">'+eur(aRemb)+'</b></div>':'')+
+    '<p class="note" style="margin-top:10px">Noter une dépense depuis le téléphone : <a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url)+'</a>. Les achats payés avec l’argent du tiroir sont notés par le gérant à la caisse. Une sortie de caisse ou une dépense du même jour et du même montant qu’une facture n’est comptée qu’une fois.</p>'+
+    '<div class="inline" style="margin-top:6px"><button class="btn small sec" id="depExport">Exporter les dépenses du mois</button><button class="btn small sec" id="depCats">Modifier les catégories</button></div>';
+  $('fiResultat').innerHTML=h;
+}
+function lignesArgent(lignes){
+  // regroupe : factures par fournisseur, caisse par motif ; les dépenses gardent leurs boutons
+  var g={}, ordre=[];
+  lignes.forEach(function(l){ if(l.src==='depense'){ ordre.push({dep:l}); return; }
+    var cle=l.src==='facture'?'f|'+norm(nomCourtF(l.txt.split(' n° ')[0])):l.src==='caisse'?'c|'+l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.src+'|'+l.txt;
+    if(!g[cle]){ g[cle]={src:l.src,txt:l.src==='facture'?l.txt.split(' n° ')[0]:l.src==='caisse'?l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.txt,montant:0,n:0,caisse:false}; ordre.push({g:g[cle]}); }
+    g[cle].montant+=l.montant; g[cle].n++; if(l.payeCaisse) g[cle].caisse=true; });
+  return ordre.sort(function(a,b){ return (b.g?b.g.montant:b.dep.montant)-(a.g?a.g.montant:a.dep.montant); }).map(function(o){
+    if(o.g) return '<div class="row"><span class="l">'+SRC_TAG[o.g.src]+' '+esc(o.g.txt)+(o.g.n>1?' <span class="note">('+o.g.n+(o.g.src==='facture'?' factures':' fois')+')</span>':'')+(o.g.caisse?' <span class="note">· payé avec la caisse</span>':'')+'</span><b class="num">'+eur(o.g.montant)+'</b></div>';
+    var l=o.dep, x=l.dep;
+    return '<div class="row"><span class="l">'+SRC_TAG.depense+' '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' · '+esc(l.txt)+' <span class="note">'+esc(x.paiement||'')+'</span>'+(x.aRembourser?(x.rembourse?' <span class="tag carte">remboursé</span>':' <span class="tag tir">à rembourser</span>'):'')+'</span><span class="inline">'+
+      (x.photo?'<button class="btn small sec" data-depvoir="'+x.__id+'">Ticket</button>':'')+(x.aRembourser&&!x.rembourse?'<button class="btn small sec" data-deprem="'+x.__id+'">Remboursé</button>':'')+'<button class="btn small danger" data-depsupp="'+x.__id+'">✕</button></span><b class="num">'+eur(x.montant)+'</b></div>';
+  }).join('');
 }
 function chargerMarges(carte){
   var d30=jour(new Date(Date.now()-29*864e5));
