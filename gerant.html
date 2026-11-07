@@ -210,11 +210,49 @@ function ouvertureAffiche(){
 function rappelSortiesPuisCloture(){
   chargerStock(function(){
     var nb=mvtsActifs().filter(function(m){ return m.type==='consommation'&&m.jour===jour(); }).length;
-    if(nb){ comptage('cloture'); return; }
+    if(nb){ etapeFrites(function(){ comptage('cloture'); }); return; }
     ouvrirModal('<div style="text-align:center;font-size:34px">📋</div><h2 style="font-size:22px;text-align:center">Avant de compter le tiroir</h2><p class="sub" style="margin:0;text-align:center">Les sorties du jour ne sont pas encore indiquées.</p><button class="btn dark" id="rsOui">Indiquer les sorties maintenant</button><button class="btn sec" id="rsNon">Plus tard, compter le tiroir</button>');
     $('rsOui').onclick=function(){ fermerModal(); vueSorties(); };
-    $('rsNon').onclick=function(){ fermerModal(); comptage('cloture'); };
+    $('rsNon').onclick=function(){ fermerModal(); etapeFrites(function(){ comptage('cloture'); }); };
   });
+}
+/* ---------- frites restantes au comptoir (début de la clôture) ---------- */
+// utilisé du jour = reporté + sorti − jeté − sacs restants ; les sacs restants servent le lendemain
+function produitFrites(){
+  var m=STOCKCFG.regles&&STOCKCFG.regles.map&&STOCKCFG.regles.map.frites, r=null;
+  (STOCKCFG.produits||[]).forEach(function(p){ if(r||p.actif===false) return; if(m?p.id===m:(p.id==='frites'||/frite/i.test(p.nom||''))) r=p; });
+  return r;
+}
+function etapeFrites(suite){
+  var p=produitFrites(); if(!p){ suite(); return; }
+  var act=mvtsActifs(), j=jour(), sortis=0, hier=null;
+  if(act.some(function(m){ return m.type==='reste_soir'&&m.jour===j; })){ suite(); return; }   // déjà compté ce soir
+  act.forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==p.id) return;
+    if(m.type==='consommation'&&m.jour===j) sortis+=l.qte;
+    if(m.type==='reste_soir'&&m.jour<j&&(!hier||m.tsClient>hier.tsClient)) hier={tsClient:m.tsClient,qte:l.qte}; }); });
+  var rep=hier?hier.qte:0;
+  if(!sortis&&!rep){ suite(); return; }   // rien à compter
+  var c=condDe(p)||{nom:'sac',contenu:2.5}, n=0;
+  function sacs(q){ return nb(q/c.contenu)+' '+pluriel(c.nom,q/c.contenu); }
+  ouvrirModal('<p class="sub" style="margin:0;text-align:center">Clôture du soir · étape 1 sur 2</p><h2 style="font-size:22px;text-align:center">Frites restantes au comptoir</h2>'+
+    '<p class="sub" style="margin:0;text-align:center">Compte les '+esc(pluriel(c.nom,2))+' de '+nb(c.contenu)+' '+esc(p.unite||'kg')+' qui ne sont pas utilisés ce soir. Ils serviront demain.</p>'+
+    '<div class="step" style="max-width:320px;margin:14px auto 4px"><button id="frM" aria-label="Un '+esc(c.nom)+' de moins">−</button><input id="frN" inputmode="numeric" value="0"><button id="frP" aria-label="Un '+esc(c.nom)+' de plus">+</button></div>'+
+    '<p class="sub" id="frKg" style="margin:0;text-align:center"></p>'+
+    '<p class="sub" style="margin:4px 0 0;text-align:center">Sortis aujourd’hui : '+sacs(sortis)+(rep?' · reportés d’hier : '+sacs(rep):'')+'</p>'+
+    '<button class="btn prim" id="frOk">Valider et compter le tiroir</button><button class="btn sec" id="frZero">Il ne reste aucun '+esc(c.nom)+'</button>');
+  function lire(){ var v=parseInt($('frN').value,10); return isNaN(v)||v<0?0:v; }
+  function maj(){ n=lire(); $('frKg').textContent=n+' '+pluriel(c.nom,n)+' · '+nb(n*c.contenu)+' '+(p.unite||'kg'); }
+  $('frM').onclick=function(){ $('frN').value=Math.max(0,lire()-1); maj(); };
+  $('frP').onclick=function(){ $('frN').value=lire()+1; maj(); };
+  $('frN').oninput=maj; maj();
+  function envoyerReste(k){
+    $('frOk').disabled=true; $('frZero').disabled=true;
+    db.collection('stock_mvts').add({type:'reste_soir',lignes:[{produit:p.id,qte:Math.round(k*c.contenu*1000)/1000}],note:'Clôture du soir',jour:j,h:hhmm(),tsClient:Date.now(),par:GERANT})
+      .then(function(){ toast('Frites restantes notées'); }).catch(function(){ toast('Frites restantes non enregistrées : réessaie demain'); })
+      .then(function(){ fermerModal(); suite(); });
+  }
+  $('frOk').onclick=function(){ envoyerReste(lire()); };
+  $('frZero').onclick=function(){ envoyerReste(0); };
 }
 /* ---------- comptage (ouverture avec différence, ou clôture) ---------- */
 var COUPURES=[['b50',5000,'50 €'],['b20',2000,'20 €'],['b10',1000,'10 €'],['b5',500,'5 €'],['p2',200,'2 €'],['p1',100,'1 €']];

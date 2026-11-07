@@ -1619,7 +1619,7 @@ function rendreMvts(){
     var val=0;
     var txt=(m.lignes||[]).map(function(l){ var p=prodP(l.produit)||{nom:'?'}; val+=(prixAchat(l.produit)||0)*l.qte; return esc(p.nom)+' '+qFmt(l.qte,p.unite); }).join(', ');
     if(m.type==='perte'){ if(m.jour>=debutSem) pertesSem+=val; if(m.jour>=m0) pertesMois+=val; var k=(m.motif||'')+' · '+txt; }
-    var tag=m.type==='reception'?'<span class="tag carte">Livraison</span>':m.type==='inventaire'?'<span class="tag">Inventaire</span>':m.type==='consommation'?'<span class="tag">Sortie du jour</span>':m.type==='annule_mvt'?'<span class="tag">Correction</span>':'<span class="tag ann">Perte</span>';
+    var tag=m.type==='reception'?'<span class="tag carte">Livraison</span>':m.type==='inventaire'?'<span class="tag">Inventaire</span>':m.type==='consommation'?'<span class="tag">Sortie du jour</span>':m.type==='annule_mvt'?'<span class="tag">Correction</span>':m.type==='reste_soir'?'<span class="tag">Reste du soir</span>':'<span class="tag ann">Perte</span>';
     var four=m.fournisseur&&m.fournisseur!=='autre'&&fourP(m.fournisseur)?' · '+esc(fourP(m.fournisseur).nom):'';
     return '<div class="row"><span class="t num">'+esc(m.jour.slice(5))+' '+esc(m.h||'')+'</span><span class="l">'+tag+four+' '+txt+(m.motif?' · '+esc(m.motif):'')+(m.note?' <span class="note">('+esc(m.note)+')</span>':'')+'</span><b class="num">'+(m.type==='perte'&&val?'−'+eur(val):'')+'</b></div>';
   });
@@ -1745,7 +1745,8 @@ function chronologieStock(evs,mvts,R,ratios){
   mvtsSansAnnules(mvts).forEach(function(m){ if(['consommation','inventaire','reception','perte','reste_soir'].indexOf(m.type)>=0) items.push({ts:m.tsClient||0,jour:m.jour,t:m.type,m:m}); });
   items.sort(function(a,b){ return a.ts-b.ts; });
   var suivi={};   // produit → instant où son suivi au comptoir commence
-  items.forEach(function(it){ if(it.t==='consommation'||it.t==='inventaire') (it.m.lignes||[]).forEach(function(l){ if(suivi[l.produit]==null) suivi[l.produit]=it.ts; }); });
+  // le suivi commence au début du jour de la première sortie (même si elle est notée le soir) : les ventes de ce jour-là comptent
+  items.forEach(function(it){ if(it.t==='consommation'||it.t==='inventaire') (it.m.lignes||[]).forEach(function(l){ if(suivi[l.produit]==null) suivi[l.produit]=new Date(it.jour+'T00:00:00').getTime(); }); });
   var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{}}, jourCourant=null;
   function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},manque:{},ca:0,comptoirFin:{},debut:{},perteAuto:{},resteCompte:{},sansReste:{},consoReelle:{},estCpt:{}}; }
   // frites : on ne connaît pas les grammes par sandwich ; ce qui est utilisé = reporté + sorti − jeté − sacs restants comptés le soir
