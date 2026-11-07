@@ -546,6 +546,16 @@ function mvtsSnap(depuis){
   }
   return MVC.p.then(function(l){ var docs=l.filter(function(o){ return o.d.jour>=depuis; }).map(function(o){ return {id:o.id,data:function(){ return Object.assign({},o.d); }}; }); return {docs:docs,size:docs.length,empty:!docs.length}; });
 }
+/* ---------- RÉGLAGES EN MÉMOIRE ---------- */
+// config/stock, finances, carte, equipe… : lus une fois, puis suivis en direct (toujours à jour, sans relecture)
+var CFG={};
+function cfgSnap(n){ var c=CFG[n];
+  if(!c){ c=CFG[n]={}; c.p=new Promise(function(ok,ko){ c.unsub=db.collection('config').doc(n).onSnapshot(function(sn){ c.s=sn; ok(sn); },function(e){ delete CFG[n]; ko(e); }); }); }
+  return c.s?Promise.resolve(c.s):c.p; }
+// petites lectures du mois (heures, dépenses) gardées une minute
+var MEMO_Q={};
+function memoQ(k,f){ var m=MEMO_Q[k]; if(m&&Date.now()-m.t<EVC_TTL) return m.p; var pr=f(); MEMO_Q[k]={t:Date.now(),p:pr}; pr.catch(function(){ delete MEMO_Q[k]; }); return pr; }
+function memoVider(pre){ Object.keys(MEMO_Q).forEach(function(k){ if(k.indexOf(pre)===0) delete MEMO_Q[k]; }); }
 var tT=null;function toast(m){var t=$('toast');t.textContent=m;t.className='toast on';clearTimeout(tT);tT=setTimeout(function(){t.className='toast'},2400)}
 
 /* ---------- connexion ---------- */
@@ -627,7 +637,7 @@ var NOMS={hamburger:'Hamburger',mexicanos:'Mexicanos',poulet:'Poulet pané',mulk
 function nomP(id){return NOMS[id]||id}
 function nomE(id){return NOMS_EXT[id]||id}
 function chargerNoms(){
-  db.collection('config').doc('carte').get().then(function(s){
+  cfgSnap('carte').then(function(s){
     if(!s.exists) return; var c=s.data();
     (c.produits||[]).forEach(function(p){NOMS[p.id]=p.nom}); (c.seuls||[]).forEach(function(p){NOMS[p.id]=p.nom}); (c.extras||[]).forEach(function(e){NOMS_EXT[e.id]=e.nom});
   }).catch(function(){});
@@ -661,6 +671,10 @@ function demarrer(){
   suivreNotes();
   setTimeout(function(){ try{ majATraiter(); }catch(e){} },2500);
   setTimeout(function(){ try{ suivreSortiesJour(); majSortiesDirect(); }catch(e){} },2000);
+  // préchargement discret de « Chiffres » : réglages, heures et dépenses du mois
+  setTimeout(function(){ try{ ['stock','finances','carte','equipe','equipe_prive','depenses'].forEach(function(n){ cfgSnap(n).catch(function(){}); });
+    var mo=jour().slice(0,7); memoQ('pt|'+mo+'-01|'+mo+'-31',function(){ return pointagesFusion(mo+'-01',mo+'-31'); }).catch(function(){});
+    memoQ('dep|'+mo,function(){ return db.collection('depenses').where('mois','==',mo).get(); }).catch(function(){}); }catch(e){} },3500);
   // préchargement discret des ventes des 60 derniers jours (seuls les jours pas encore gardés sont téléchargés)
   setTimeout(function(){ evsSnap(jour(new Date(Date.now()-60*864e5))).catch(function(){}); },5000);
   setTimeout(function(){ try{ chargerFactures(); }catch(e){} },1200);
@@ -802,7 +816,7 @@ function chargerAudit(P0,cible){
     db.collection('clotures').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
     pointagesFusion(P.pdu,P.au),
     db.collection('stock_mvts').where('jour','>=',P.pdu).where('jour','<=',P.au).get(),
-    db.collection('config').doc('equipe').get(), db.collection('config').doc('equipe_prive').get(), db.collection('config').doc('stock').get()
+    cfgSnap('equipe'), cfgSnap('equipe_prive'), cfgSnap('stock')
   ]);
   AUD_CACHE[cleA]={t:Date.now(),p:prom};
   prom.then(function(res){ traiterAudit(P,res,cible); }).catch(function(e){ delete AUD_CACHE[cleA]; (cible||$('auCorps')).innerHTML='<div class="err">Lecture impossible ('+e.code+')</div>'; });
@@ -1122,7 +1136,7 @@ function majSortiesDirect(){ clearTimeout(SD.t); SD.t=setTimeout(rendreSortiesDi
 function rendreSortiesDirect(){
   var el=$('dSorties'); if(!el) return;
   var j=jour(), d60=jour(new Date(Date.now()-59*864e5)), R=reglesConso();
-  Promise.all([evsSnap(d60,j),mvtsSnap(d60),PRIX_CHARGE?null:chargerPrix(),(SC.produits&&SC.produits.length)?null:db.collection('config').doc('stock').get().then(function(x){ if(x.exists){ SC=x.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } })]).then(function(r){
+  Promise.all([evsSnap(d60,j),mvtsSnap(d60),PRIX_CHARGE?null:chargerPrix(),(SC.produits&&SC.produits.length)?null:cfgSnap('stock').then(function(x){ if(x.exists){ SC=x.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } })]).then(function(r){
     var evs=r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
     var mvts=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).filter(function(m){ return m.jour<j; }).concat(SD.mvtsJour);
     var ratios=ratiosAppris(evs.filter(function(x){return x.jour>jour(new Date(Date.now()-30*864e5))}),mvts,R);
@@ -1350,7 +1364,7 @@ var ROLES={proprietaire:'Propriétaire',gerant:'Gérant',etudiant:'Étudiant',em
 
 function initEquipe(){
   // config/equipe : noms et fonctions (lisible par le gérant) ; config/equipe_prive : contrats et coûts (toi seul)
-  Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get(),chargerBadges()]).then(function(r){
+  Promise.all([cfgSnap('equipe'),cfgSnap('equipe_prive'),chargerBadges()]).then(function(r){
     EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
     var pv=r[1].exists?(r[1].data().membres||{}):{};
     EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
@@ -1551,7 +1565,7 @@ document.addEventListener('click',function(ev){
 });
 
 /* ---------- STOCK (propriétaire) ---------- */
-function initStockPastille(){ Promise.all([db.collection('config').doc('stock').get(),mvtsSnap(jour(new Date(Date.now()-120*864e5)))]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&q>=0&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
+function initStockPastille(){ Promise.all([cfgSnap('stock'),mvtsSnap(jour(new Date(Date.now()-120*864e5)))]).then(function(r){ SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; SMV=r[1].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return a.tsClient-b.tsClient}); var bas=0; SC.produits.forEach(function(p){ if(p.actif===false) return; var q=stockP(p.id); if(q!=null&&q>=0&&p.seuil!=null&&q<=p.seuil) bas++; }); mettrePastille('outil-stock',bas); }).catch(function(){}); }
 var SC={produits:[],fournisseurs:[]}, SMV=[], SC_SUPPR={};
 var PRODUITS_BASE=[
   {id:'baguettes',nom:'Baguettes',unite:'pièces'},{id:'hamburger',nom:'Hamburger',unite:'pièces',cond:'boîte',contenu:30},{id:'mulky',nom:'Mulky',unite:'pièces'},{id:'mexicanos',nom:'Mexicanos',unite:'pièces'},
@@ -1580,7 +1594,7 @@ function initStock(){
 function initStockSuite(cfg){
   var depuis=jour(new Date(Date.now()-120*864e5));
   Promise.all([
-    cfg?cfg.then(function(c){ return c?{exists:true,data:function(){ return c; }}:db.collection('config').doc('stock').get(); }):db.collection('config').doc('stock').get(),
+    cfg?cfg.then(function(c){ return c?{exists:true,data:function(){ return c; }}:cfgSnap('stock'); }):cfgSnap('stock'),
     mvtsSnap(depuis),
     db.collection('commandes').where('jour','>=',jour(new Date(Date.now()-30*864e5))).get()
   ]).then(function(r){
@@ -1817,7 +1831,7 @@ function rendreBilans(C){
 }
 /* ---------- food cost du jour, en direct ---------- */
 var SC_DIRECT=null;
-function chargerScDirect(){ db.collection('config').doc('stock').get().then(function(s){ SC_DIRECT=s.exists?s.data():null; if(SC_DIRECT&&(!SC.produits||!SC.produits.length)){ SC=SC_DIRECT; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } majFoodCostDirect(); }).catch(function(){}); }
+function chargerScDirect(){ cfgSnap('stock').then(function(s){ SC_DIRECT=s.exists?s.data():null; if(SC_DIRECT&&(!SC.produits||!SC.produits.length)){ SC=SC_DIRECT; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } majFoodCostDirect(); }).catch(function(){}); }
 var DERNIERS_EVS_JOUR=[];
 function majFoodCostDirect(evs){
   if(evs) DERNIERS_EVS_JOUR=evs; var el=$('dFoodCost'); if(!el) return;
@@ -1913,7 +1927,7 @@ function outilControle(a){
   });
 }
 function outilEquipe(a){
-  return Promise.all([db.collection('config').doc('equipe').get(),db.collection('config').doc('equipe_prive').get(),pointagesFusion(a.du,a.au)]).then(function(res){
+  return Promise.all([cfgSnap('equipe'),cfgSnap('equipe_prive'),pointagesFusion(a.du,a.au)]).then(function(res){
     var membres=res[0].exists?(res[0].data().membres||[]):[], pv=res[1].exists?(res[1].data().membres||{}):{};
     var pts=res[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}), refs={}, par={};
     pts.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
@@ -1927,7 +1941,7 @@ function outilEquipe(a){
 }
 function outilStock(){
   var depuis=jour(new Date(Date.now()-60*864e5));
-  return Promise.all([db.collection('config').doc('stock').get(),mvtsSnap(depuis),db.collection('commandes').where('jour','>=',depuis).get()]).then(function(res){
+  return Promise.all([cfgSnap('stock'),mvtsSnap(depuis),db.collection('commandes').where('jour','>=',depuis).get()]).then(function(res){
     SC=res[0].exists?res[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[];
     SMV=res[1].docs.map(function(d){return d.data()}).sort(function(a,b){return a.tsClient-b.tsClient});
     return compacter({produits:SC.produits.map(function(p){ return {id:p.id,nom:p.nom,unite:p.unite,seuil:p.seuil,stockVise:p.cible,prixAchatEuros:(prixAchat(p.id)||0)/100,stockActuel:stockP(p.id),fournisseur:p.fournisseur}; }),fournisseurs:SC.fournisseurs,mouvements:SMV.map(function(m){return {jour:m.jour,type:m.type,lignes:m.lignes,motif:m.motif,note:m.note,fournisseur:m.fournisseur}}),commandes:res[2].docs.map(function(d){var c=d.data();return {jour:c.jour,fournisseur:c.fournisseur,lignes:c.lignes}})});
@@ -2008,7 +2022,7 @@ document.addEventListener('click',function(e){
 function outilFoodCost(a){
   var du=String(a.du||jour()), au=String(a.au||jour());
   if((new Date(au)-new Date(du))/864e5>62) return Promise.resolve('Période trop longue : 62 jours maximum.');
-  return Promise.all([db.collection('config').doc('stock').get(),PRIX_CHARGE?null:chargerPrix(),evsSnap(du,au)]).then(function(r){
+  return Promise.all([cfgSnap('stock'),PRIX_CHARGE?null:chargerPrix(),evsSnap(du,au)]).then(function(r){
     var sc=r[0].exists?r[0].data():{produits:[]}; if(!SC||!SC.produits||!SC.produits.length){ SC=sc; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; }
     var R=reglesConso(), ratios=PRIX.appris||{}, evs=r[2].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'}), ann={}, parJour={}, tot={conso:{},ca:0};
     evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
@@ -2217,7 +2231,7 @@ function controlesFacture(f,id){
 function ouvrirVerification(f,piece,factureId){
   FAC.brouillon={f:f,piece:piece,id:factureId||null};
   var prods=(SC.produits||[]).filter(function(p){return p.actif!==false});
-  function chargeProduits(){ return prods.length?Promise.resolve():db.collection('config').doc('stock').get().then(function(s){ if(s.exists){ SC=s.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; prods=SC.produits.filter(function(p){return p.actif!==false}); } }).catch(function(){}); }
+  function chargeProduits(){ return prods.length?Promise.resolve():cfgSnap('stock').then(function(s){ if(s.exists){ SC=s.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; prods=SC.produits.filter(function(p){return p.actif!==false}); } }).catch(function(){}); }
   chargeProduits().then(function(){
     function optsProd(des){ var best=''; prods.forEach(function(p){ var a=norm(p.nom).split(' ')[0]; if(a&&norm(des).indexOf(a)>=0) best=p.id; }); return '<option value="">— pas dans le stock —</option>'+prods.map(function(p){ return '<option value="'+p.id+'" '+(p.id===best?'selected':'')+'>'+esc(p.nom)+'</option>'; }).join(''); }
     var h='<div class="fa-verif">'+(piece&&piece.media!=='application/pdf'?'<img class="fa-img" src="data:'+piece.media+';base64,'+piece.data+'" alt="Photo de la facture">':'<div class="fa-img vide">'+(f.source==='peppol'?'Facture Peppol (données exactes)':'PDF')+'</div>')+
@@ -2773,7 +2787,7 @@ function enregistrerAppris(ratios){
   db.collection('config').doc('prix').set(PRIX).catch(function(){ APPRIS_ENREG=null; });
 }
 function chargerPrix(){
-  return Promise.all([db.collection('config').doc('prix').get(),db.collection('config').doc('stock').get()]).then(function(r){
+  return Promise.all([db.collection('config').doc('prix').get(),cfgSnap('stock')]).then(function(r){
     PRIX=r[0].exists?r[0].data():{produits:{},factures:{}}; PRIX.produits=PRIX.produits||{}; PRIX.factures=PRIX.factures||{};
     var st=r[1].exists?r[1].data():null, migr=false;
     if(st&&st.produits) st.produits.forEach(function(p){ if(p.prix!=null){ if(!PRIX.produits[p.id]) PRIX.produits[p.id]={prix:p.prix,historique:[{date:jour(),prix:p.prix,source:'stock'}]}; delete p.prix; migr=true; } });
@@ -2807,7 +2821,7 @@ function prixUnitaireStock(l,p){
 }
 /* reprend les prix de toutes les factures pas encore traitées (validées ou vérifiées par le gérant) */
 function reprendrePrixFactures(toutes){
-  return Promise.all([facturesSnap(),db.collection('config').doc('stock').get()]).then(function(r){
+  return Promise.all([facturesSnap(),cfgSnap('stock')]).then(function(r){
     var st=r[1].exists?r[1].data():{produits:[]}, produits=(st.produits||[]).filter(function(p){return p.actif!==false});
     var facts=r[0].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).filter(function(f){ return (f.statut==='validee'||f.statut==='a_verifier') && (toutes||!PRIX.factures[f.__id]); })
       .sort(function(a,b){ return String(a.date||a.jour||'').localeCompare(String(b.date||b.jour||'')); });
@@ -2833,7 +2847,7 @@ var FIN={mois:null,charges:[]};
 function initFinances(){ FIN.mois=jour().slice(0,7); $('fiMois').value=FIN.mois; rendreFinances(true); }
 function rendreFinances(reprendre){
   (PRIX_CHARGE?Promise.resolve():chargerPrix()).then(function(){ return reprendre?reprendrePrixFactures(false).catch(function(){}):null; }).then(function(){
-    return Promise.all([db.collection('config').doc('stock').get(),db.collection('config').doc('finances').get(),db.collection('config').doc('carte').get()]);
+    return Promise.all([cfgSnap('stock'),cfgSnap('finances'),cfgSnap('carte')]);
   }).then(function(r){
     SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[];
     FIN.charges=(r[1].exists&&r[1].data().charges)||[{nom:'Loyer',montant:0},{nom:'Énergie',montant:0},{nom:'Assurances',montant:0},{nom:'Comptable',montant:0}];
@@ -2859,10 +2873,10 @@ function rendreResultat(){
   Promise.all([
     evsSnap(du,au),
     facturesSnap(),
-    pointagesFusion(du,au),
-    db.collection('config').doc('equipe_prive').get(),
+    memoQ('pt|'+du+'|'+au,function(){ return pointagesFusion(du,au); }),
+    cfgSnap('equipe_prive'),
     chargerDepenses(mois).catch(function(){ return []; }),
-    db.collection('config').doc('equipe').get()
+    cfgSnap('equipe')
   ]).then(function(r){
     var evs=r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
     var R=analyser(evs), caTTC=R.ca, caHT=caTTC/(1+tva/100), joursV=Object.keys(R.jours).length;
@@ -3016,7 +3030,7 @@ document.addEventListener('click',function(e){ var b=e.target.closest('#jPrem,#j
 /* ---------- DÉPENSES DIVERSES (notées depuis le téléphone, page depense.html) ---------- */
 var DEP={liste:[],cats:['Courses magasin','Emballages','Entretien','Petit matériel','Carburant','Parking','Autre']};
 function chargerDepenses(mois){
-  return Promise.all([db.collection('depenses').where('mois','==',mois).get(),db.collection('config').doc('depenses').get()]).then(function(r){
+  return Promise.all([memoQ('dep|'+mois,function(){ return db.collection('depenses').where('mois','==',mois).get(); }),cfgSnap('depenses')]).then(function(r){
     DEP.liste=r[0].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).sort(function(a,b){return b.tsClient-a.tsClient});
     var c=r[1].exists&&r[1].data().categories; if(Array.isArray(c)&&c.length) DEP.cats=c;
     return DEP.liste;
@@ -3040,8 +3054,8 @@ function rendreDepenses(){
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-depvoir],[data-deprem],[data-depsupp],#depExport,#depCats'); if(!b) return;
   if(b.hasAttribute('data-depvoir')){ db.collection('depenses_img').doc(b.getAttribute('data-depvoir')).get().then(function(s){ if(!s.exists){ toast('Photo introuvable'); return; } var w=window.open(''); if(w) w.document.write('<img src="data:'+s.data().media+';base64,'+s.data().data+'" style="max-width:100%">'); }); return; }
-  if(b.hasAttribute('data-deprem')){ db.collection('depenses').doc(b.getAttribute('data-deprem')).update({rembourse:jour()}).then(function(){ toast('Marquée remboursée'); rendreResultat(); }); return; }
-  if(b.hasAttribute('data-depsupp')){ if(!confirm('Supprimer cette dépense ?')) return; var id=b.getAttribute('data-depsupp'); Promise.all([db.collection('depenses').doc(id).delete(),db.collection('depenses_img').doc(id).delete().catch(function(){})]).then(function(){ toast('Supprimée'); rendreResultat(); }); return; }
+  if(b.hasAttribute('data-deprem')){ db.collection('depenses').doc(b.getAttribute('data-deprem')).update({rembourse:jour()}).then(function(){ memoVider('dep|'); toast('Marquée remboursée'); rendreResultat(); }); return; }
+  if(b.hasAttribute('data-depsupp')){ if(!confirm('Supprimer cette dépense ?')) return; var id=b.getAttribute('data-depsupp'); Promise.all([db.collection('depenses').doc(id).delete(),db.collection('depenses_img').doc(id).delete().catch(function(){})]).then(function(){ memoVider('dep|'); toast('Supprimée'); rendreResultat(); }); return; }
   if(b.id==='depCats'){ var t=prompt('Catégories, séparées par des virgules',DEP.cats.join(', ')); if(t==null) return; var l=t.split(',').map(function(x){return x.trim()}).filter(Boolean); if(!l.length) return;
     db.collection('config').doc('depenses').set({categories:l,maj:Date.now()}).then(function(){ DEP.cats=l; toast('Catégories enregistrées'); }); return; }
   if(b.id==='depExport'){ chargerXlsx().then(function(){ var m=$('fiMois').value||jour().slice(0,7);
@@ -3060,7 +3074,7 @@ var CARTE_DEFAUT={
 };
 var carte=null;
 function chargerCarte(){
-  db.collection('config').doc('carte').get().then(function(s){
+  cfgSnap('carte').then(function(s){
     carte=s.exists?s.data():JSON.parse(JSON.stringify(CARTE_DEFAUT));
     $('carteEtat').textContent=s.exists?'Carte publiée'+(carte.maj?' le '+new Date(carte.maj).toLocaleString('fr-BE'):''):'Carte actuelle de la caisse (pas encore publiée)';
     rendreCarte();
@@ -3165,8 +3179,8 @@ function exporter(du,au){
   var noms=Object.keys(COLLECTIONS);
   // noms des personnes et produits pour un export lisible
   var prep=Promise.all([
-    db.collection('config').doc('equipe').get().then(function(s){ if(s.exists) EQ.membres=s.data().membres||[]; }).catch(function(){}),
-    db.collection('config').doc('stock').get().then(function(s){ if(s.exists){ SC=s.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } }).catch(function(){})
+    cfgSnap('equipe').then(function(s){ if(s.exists) EQ.membres=s.data().membres||[]; }).catch(function(){}),
+    cfgSnap('stock').then(function(s){ if(s.exists){ SC=s.data(); SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; } }).catch(function(){})
   ]);
   return Promise.all([chargerXlsx(),prep]).then(function(){
     return Promise.all(noms.map(function(c){
