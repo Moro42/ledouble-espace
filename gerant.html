@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#120E0A">
 <title>LE DOUBLE · Espace gérant</title>
 <style>
-:root{--bg:#ECE8E2;--surface:#FFFFFF;--surface2:#E3DED6;--ink:#120E0A;--ink-soft:#4A4238;--line:#CFC6B9;--accent:#A87A3A;--gold:#E9C27F;--ok:#11703A;--warn:#B06A08;--danger:#9E1F15;--sel:#F2E1C4}
+:root{--bg:#ECE8E2;--surface:#FFFFFF;--surface2:#E3DED6;--ink:#120E0A;--ink-soft:#4A4238;--soft:#4A4238;--line:#CFC6B9;--accent:#A87A3A;--accent-strong:#6E4A17;--gold:#E9C27F;--ok:#11703A;--ok-bg:#E4F1E9;--warn:#B06A08;--warn-bg:#FBEBD3;--danger:#9E1F15;--danger-bg:#F7E3E1;--sel:#F2E1C4;--font:Roboto,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:Roboto,"Segoe UI",system-ui,-apple-system,Arial,sans-serif;font-size:17px;line-height:1.4;padding-bottom:env(safe-area-inset-bottom,0)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.4;padding-bottom:env(safe-area-inset-bottom,0)}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0;touch-action:manipulation}
 input{font:inherit;color:var(--ink)}
 .num{font-variant-numeric:tabular-nums}
@@ -35,7 +35,7 @@ h2{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
 .big{font-size:40px;font-weight:800;letter-spacing:-.02em}
 .btn{border-radius:14px;padding:16px 20px;font-weight:700;font-size:18px;text-align:center;width:100%}
 .btn.prim{background:var(--ok);color:#fff}
-.btn.sec{background:var(--surface2)}
+.btn.sec{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line)}
 .btn.dark{background:var(--ink);color:#fff}
 .btn:disabled{opacity:.4}
 .back{color:var(--ink-soft);font-weight:700;padding:8px 0;margin-bottom:8px}
@@ -51,7 +51,7 @@ h2{font-size:28px;margin:0 0 6px;letter-spacing:-.01em}
 .total{display:flex;justify-content:space-between;align-items:baseline;background:var(--bg);border-radius:14px;padding:14px 18px;font-weight:700}
 .total b{font-size:32px}
 .done{text-align:center;display:grid;gap:12px;justify-items:center;padding:20px 0}
-.rond{width:84px;height:84px;border-radius:50%;background:#E4F1E9;color:var(--ok);font-size:46px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.rond{width:84px;height:84px;border-radius:50%;background:var(--ok-bg);color:var(--ok);font-size:46px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .msg{font-size:19px}
 .msg b{font-size:22px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:18px;z-index:30}
@@ -69,7 +69,7 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:15px}
 .pt-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .pt-btn{border-radius:12px;padding:14px 18px;font-weight:700;font-size:17px;background:var(--surface2);min-width:100px}
 .pt-btn.ok{background:var(--ok);color:#fff}
-.pt-btn.ko{background:#F7E3E1;color:var(--danger)}
+.pt-btn.ko{background:var(--danger-bg);color:var(--danger)}
 .pt-annul{color:var(--ink-soft);font-size:14px;text-decoration:underline;margin-top:6px}
 .pl-nav{display:grid;grid-template-columns:64px 1fr 64px;gap:10px;align-items:center;text-align:center;margin-bottom:14px}
 .pl-scroll{overflow-x:auto}
@@ -82,12 +82,12 @@ label.f{display:grid;gap:6px;font-weight:700;font-size:15px}
 details summary{padding:4px 0}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1.5px solid var(--line);border-radius:999px;padding:10px 16px;font-weight:700;font-size:16px;background:#fff}
-.chip.on{border-color:#6E4A17;background:var(--sel)}
+.chip.on{border-color:var(--accent-strong);background:var(--sel)}
 .st-line{grid-template-columns:1fr 200px 60px!important;padding:6px 0;border-bottom:1px solid var(--surface2)}
 .switch{display:flex;align-items:center;gap:10px;font-weight:700}
 .switch input{width:22px;height:22px}
 @media (max-width:520px){.st-line{grid-template-columns:1fr 150px 40px!important}}
-.st-line.doute{background:#FBEBD3;border-radius:10px;padding:8px}
+.st-line.doute{background:var(--warn-bg);border-radius:10px;padding:8px}
 .nouveau{font-size:12px;font-weight:700;background:var(--sel);border-radius:999px;padding:2px 8px}
 .inv-ligne{display:grid;gap:6px;padding:12px 0;border-bottom:1px solid var(--surface2)}
 .inv-ligne:last-child{border-bottom:0}
@@ -159,8 +159,8 @@ function accueil(){
   var e=etatJour();
   var d=new Date().toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long'});
   function tile(id,titre,texte,badge,cls){ return '<button class="tile '+(cls||'')+'" data-go="'+id+'"><b>'+titre+'</b><span>'+texte+'</span>'+(badge||'')+'</button>'; }
-  var bOuv=e.ouverture?'<span class="badge" style="background:#E4F1E9;color:#11703A">Faite à '+e.ouverture+'</span>':'<span class="badge" style="background:#E9C27F;color:#120E0A">À faire</span>';
-  var bClo=e.cloture?'<span class="badge" style="background:#E4F1E9;color:#11703A">Faite à '+e.cloture+'</span>':'<span class="badge" style="background:#E9C27F;color:#120E0A">À faire ce soir</span>';
+  var bOuv=e.ouverture?'<span class="badge" style="background:var(--ok-bg);color:var(--ok)">Faite à '+e.ouverture+'</span>':'<span class="badge" style="background:var(--gold);color:var(--ink)">À faire</span>';
+  var bClo=e.cloture?'<span class="badge" style="background:var(--ok-bg);color:var(--ok)">Faite à '+e.cloture+'</span>':'<span class="badge" style="background:var(--gold);color:var(--ink)">À faire ce soir</span>';
   $('vue').innerHTML='<h2>Bonjour</h2><p class="sub">'+d+'</p><div class="tiles">'+
     tile('ouverture','Ouverture','Vérifier le fond de caisse',bOuv,e.ouverture?'':'main')+
     tile('livraison','Livraison','Photo de la facture ou saisie','','main')+
@@ -463,7 +463,7 @@ function rendrePlanning(lu,props){
   h+='<button class="btn dark" data-prop-new="1" style="margin-top:14px">+ Proposer un créneau supplémentaire</button>';
   if(props.length){
     h+='<h3 style="margin:22px 0 8px">Mes propositions</h3><div class="card">'+props.sort(function(a,b){return b.tsClient-a.tsClient}).map(function(p){
-      var st=p.statut==='acceptee'?'<span class="etat" style="background:#E4F1E9;color:#11703A">Acceptée</span>':p.statut==='refusee'?'<span class="etat" style="background:#F7E3E1;color:#9E1F15">Refusée</span>':'<span class="etat" style="background:#FBEBD3;color:#7A4A05">En attente</span>';
+      var st=p.statut==='acceptee'?'<span class="etat" style="background:var(--ok-bg);color:var(--ok)">Acceptée</span>':p.statut==='refusee'?'<span class="etat" style="background:var(--danger-bg);color:var(--danger)">Refusée</span>':'<span class="etat" style="background:var(--warn-bg);color:var(--warn)">En attente</span>';
       return '<div class="pt-ligne"><div>'+esc(p.resume||'')+(p.motif?'<div class="sub" style="margin:2px 0 0">'+esc(p.motif)+'</div>':'')+'</div>'+st+'</div>';
     }).join('')+'</div>';
   }
@@ -696,7 +696,7 @@ function vueCommandes(){
       $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Commandes fournisseurs</h2><p class="sub">Les quantités conseillées tiennent compte du stock actuel.</p>'+
         '<button class="btn dark" id="cmdNew">+ Préparer une commande</button>'+
         '<h3 style="margin:22px 0 8px">Commandes des 30 derniers jours</h3><div class="card">'+(cmds.length?cmds.map(function(c){
-          return '<div class="pt-ligne"><div><b>'+esc(nomFour(c.fournisseur))+'</b><div class="sub" style="margin:2px 0 0">'+esc(c.jour)+' · '+(c.lignes||[]).length+' produit(s)</div></div><span class="etat" style="background:#E4F1E9;color:#11703A">Préparée</span></div>';
+          return '<div class="pt-ligne"><div><b>'+esc(nomFour(c.fournisseur))+'</b><div class="sub" style="margin:2px 0 0">'+esc(c.jour)+' · '+(c.lignes||[]).length+' produit(s)</div></div><span class="etat" style="background:var(--ok-bg);color:var(--ok)">Préparée</span></div>';
         }).join(''):'<p class="sub" style="margin:0">Aucune commande récente.</p>')+'</div>';
       $('cmdNew').onclick=function(){ saisieLignes('commande'); };
     });
@@ -724,7 +724,7 @@ function vueNotes(){
         '<textarea class="sel" id="noTxt" rows="4" maxlength="1000" placeholder="Écris ton message…" style="font:inherit"></textarea>'+
         '<label class="switch"><input type="checkbox" id="noUrg"> Urgent</label><button class="btn prim" id="noOk">Envoyer au propriétaire</button></div>'+
         '<h3 style="margin:22px 0 8px">Mes notes récentes</h3><div class="card">'+(notes.length?notes.map(function(n){
-          return '<div class="pt-ligne"><div><b>'+esc(n.categorie)+(n.urgent?' · urgent':'')+'</b><div class="sub" style="margin:2px 0 0">'+esc(n.texte)+'</div><div class="sub" style="margin:2px 0 0;font-size:13px">'+esc(n.jour)+' '+esc(n.h)+'</div></div>'+(n.lu?'<span class="etat" style="background:#E4F1E9;color:#11703A">Lue</span>':'<span class="etat" style="background:#FBEBD3;color:#7A4A05">Non lue</span>')+'</div>';
+          return '<div class="pt-ligne"><div><b>'+esc(n.categorie)+(n.urgent?' · urgent':'')+'</b><div class="sub" style="margin:2px 0 0">'+esc(n.texte)+'</div><div class="sub" style="margin:2px 0 0;font-size:13px">'+esc(n.jour)+' '+esc(n.h)+'</div></div>'+(n.lu?'<span class="etat" style="background:var(--ok-bg);color:var(--ok)">Lue</span>':'<span class="etat" style="background:var(--warn-bg);color:var(--warn)">Non lue</span>')+'</div>';
         }).join(''):'<p class="sub" style="margin:0">Aucune note récente.</p>')+'</div>';
     }
     render();

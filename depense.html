@@ -15,9 +15,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
-:root{--ink:#120E0A;--soft:#4A4238;--line:#CFC6B9;--bg:#ECE8E2;--surface:#FFFFFF;--accent:#A87A3A;--sel:#F2E1C4;--ok:#11703A;--danger:#9E1F15}
+:root{--bg:#ECE8E2;--surface:#FFFFFF;--surface2:#E3DED6;--ink:#120E0A;--ink-soft:#4A4238;--soft:#4A4238;--line:#CFC6B9;--accent:#A87A3A;--accent-strong:#6E4A17;--gold:#E9C27F;--ok:#11703A;--ok-bg:#E4F1E9;--warn:#B06A08;--warn-bg:#FBEBD3;--danger:#9E1F15;--danger-bg:#F7E3E1;--sel:#F2E1C4;--font:Roboto,"Segoe UI",system-ui,-apple-system,Arial,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font)}
 body{padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
 .top{background:var(--ink);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between}
 .top button{background:none;border:0;color:#BDB3A6;font-size:14px}
@@ -31,7 +31,7 @@ main{max-width:480px;margin:0 auto;padding:14px 16px 28px;display:grid;gap:12px}
 .lbl{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);margin:2px 0 8px}
 .chips{display:flex;flex-wrap:wrap;gap:7px}
 .chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 14px;font-size:15px;font-weight:600;color:var(--ink);min-height:44px}
-.chip.on{background:var(--sel);border-color:#6E4A17}
+.chip.on{background:var(--sel);border-color:var(--accent-strong)}
 .photo{display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--line);border-radius:14px;min-height:56px;font-weight:700;color:var(--soft);cursor:pointer}
 .photo.ok{border-style:solid;border-color:var(--ok);color:var(--ok)}
 input.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:16px;font-family:inherit}
