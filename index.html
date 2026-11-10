@@ -2869,7 +2869,8 @@ function enregistrerAppris(ratios){
   if(APPRIS_ENREG==null){ var a=PRIX.appris||{}; APPRIS_ENREG=JSON.stringify({frites:r3(a.frites),crudites:r3(a.crudites),date:a.date||''}); }
   PRIX.appris=ap;
   var js=JSON.stringify(ap); if(js===APPRIS_ENREG) return; APPRIS_ENREG=js;
-  db.collection('config').doc('prix').set(PRIX).catch(function(){ APPRIS_ENREG=null; });
+  // n'écrit QUE les moyennes apprises : ne doit jamais réécrire les prix avec une copie ancienne
+  db.collection('config').doc('prix').update({appris:ap}).catch(function(){ APPRIS_ENREG=null; });
 }
 function chargerPrix(){
   return Promise.all([db.collection('config').doc('prix').get(),cfgSnap('stock')]).then(function(r){
@@ -2880,7 +2881,8 @@ function chargerPrix(){
     if(!PRIX.produits.canettes&&st&&st.produits&&st.produits.some(function(p){return p.id==='canettes'})) { PRIX.produits.canettes={prix:52,historique:[{date:jour(),prix:52,source:'indiqué'}]}; migr=true; }
     PRIX_CHARGE=true;
     if(!migr) return;
-    return db.collection('config').doc('prix').set(PRIX).then(function(){ if(st){ st.maj=Date.now(); return db.collection('config').doc('stock').set(st); } });
+    var mp={}; ['baguettes','canettes'].concat(Object.keys(PRIX.produits)).forEach(function(k){ if(PRIX.produits[k]) mp['produits.'+k]=PRIX.produits[k]; });
+    return db.collection('config').doc('prix').set({produits:{}},{merge:true}).then(function(){ return db.collection('config').doc('prix').update(mp); }).then(function(){ if(st){ st.maj=Date.now(); return db.collection('config').doc('stock').set(st); } });
   }).catch(function(){ PRIX_CHARGE=true; });
 }
 function sansAccent(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9œ]+/g,' ').trim(); }
@@ -2906,6 +2908,8 @@ function prixUnitaireStock(l,p){
 }
 /* reprend les prix de toutes les factures pas encore traitées (validées ou vérifiées par le gérant) */
 function reprendrePrixFactures(toutes){
+  // DÉSACTIVÉ définitivement (demande de Hicham) : les factures ne fixent plus jamais un prix d'achat
+  return Promise.resolve({factures:0,maj:0,aConfirmer:0});
   return Promise.all([facturesSnap(),cfgSnap('stock')]).then(function(r){
     var st=r[1].exists?r[1].data():{produits:[]}, produits=(st.produits||[]).filter(function(p){return p.actif!==false});
     var facts=r[0].docs.map(function(d){var o=d.data();o.__id=d.id;return o}).filter(function(f){ return (f.statut==='validee'||f.statut==='a_verifier') && (toutes||!PRIX.factures[f.__id]); })
@@ -3104,12 +3108,13 @@ function chargerMarges(carte){
 document.addEventListener('change',function(e){ if(e.target&&e.target.id==='fiMois') rendreResultat(); });
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-pxok],[data-pxno],[data-pxman],#fiReprendre,#fiAddCh,#fiSaveCh,[data-chx]'); if(!b) return;
-  function sauver(msg){ return db.collection('config').doc('prix').set(PRIX).then(function(){ toast(msg); rendreFinances(false); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); }); }
+  // n'écrit QUE le produit modifié (jamais tout le document, pour ne pas remettre d'anciens prix)
+  function sauver(msg,pid){ var maj={}; maj['produits.'+pid]=PRIX.produits[pid]; return db.collection('config').doc('prix').update(maj).then(function(){ toast(msg); rendreFinances(false); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); }); }
   if(b.hasAttribute('data-pxok')){ var x=PRIX.produits[b.getAttribute('data-pxok')]; if(!x||!x.aConfirmer) return; var n=prompt('Prix par unité du stock (en euros), d’après la facture '+(x.aConfirmer.fournisseur||'')+' : '+eur(x.aConfirmer.prix)+' / '+(x.aConfirmer.unite||'?'),String(x.aConfirmer.prix/100).replace('.',',')); if(n==null) return; var c=cents(n); if(c==null) return;
-    x.historique=x.historique||[]; if(x.prix!==c) x.historique.push({date:x.aConfirmer.date,prix:c,fournisseur:x.aConfirmer.fournisseur}); x.prix=c; x.date=x.aConfirmer.date; delete x.aConfirmer; sauver('Prix enregistré'); }
-  if(b.hasAttribute('data-pxno')){ var y=PRIX.produits[b.getAttribute('data-pxno')]; if(y){ delete y.aConfirmer; sauver('Ignoré'); } }
+    x.historique=x.historique||[]; if(x.prix!==c) x.historique.push({date:x.aConfirmer.date,prix:c,fournisseur:x.aConfirmer.fournisseur}); x.prix=c; x.date=x.aConfirmer.date; delete x.aConfirmer; sauver('Prix enregistré',b.getAttribute('data-pxok')); }
+  if(b.hasAttribute('data-pxno')){ var y=PRIX.produits[b.getAttribute('data-pxno')]; if(y){ delete y.aConfirmer; sauver('Ignoré',b.getAttribute('data-pxno')); } }
   if(b.hasAttribute('data-pxman')){ var id=b.getAttribute('data-pxman'), z=PRIX.produits[id]=PRIX.produits[id]||{historique:[]}; var v=prompt('Prix d’achat par unité du stock (en euros)',z.prix!=null?String(z.prix/100).replace('.',','):''); if(v==null) return; var cc=cents(v); if(cc==null) return;
-    z.historique=z.historique||[]; if(z.prix!==cc) z.historique.push({date:jour(),prix:cc,fournisseur:'saisie manuelle'}); z.prix=cc; z.date=jour(); sauver('Prix enregistré'); }
+    z.historique=z.historique||[]; if(z.prix!==cc) z.historique.push({date:jour(),prix:cc,fournisseur:'saisie manuelle'}); z.prix=cc; z.date=jour(); z.manuel=true; sauver('Prix enregistré',id); }
   if(b.id==='fiReprendre'){ b.disabled=true; reprendrePrixFactures(true).then(function(r){ toast(r.factures+' facture(s) lue(s) · '+r.maj+' prix mis à jour'+(r.aConfirmer?' · '+r.aConfirmer+' à confirmer':'')); rendreFinances(false); }).catch(function(er){ alert('Lecture impossible ('+(er.code||er.message)+')'); }).then(function(){ b.disabled=false; }); }
   function lireCh(){ FIN.charges=Array.prototype.map.call(document.querySelectorAll('[data-chn]'),function(i){ var k=i.getAttribute('data-chn'); return {nom:i.value.trim(),montant:cents(document.querySelector('[data-chm="'+k+'"]').value)||0}; }).filter(function(c){return c.nom}); }
   if(b.id==='fiAddCh'){ lireCh(); FIN.charges.push({nom:'Nouvelle charge',montant:0}); rendreResultat(); }
