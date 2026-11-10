@@ -393,6 +393,7 @@ function etatPersonne(id){
 }
 
 function vuePointage(){
+  rendrePointage._r=0;
   chargerEquipe(function(){
     if(unsubPt) unsubPt();
     var corrections=[], badges=[];
@@ -407,9 +408,27 @@ function vuePointage(){
     unsubPt=function(){ try{u1();}catch(x){} try{u2();}catch(x){} };
   });
 }
+/* ---------- demande au gérant : recopier les heures des employés depuis le 1er novembre (avant la mise en place du pointage, le 11/11/2026) ---------- */
+var RATTRAPAGE={du:'2026-11-01',au:'2026-11-10'};
+function rattrapageManquant(cb){
+  var emp=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'; });
+  if(!emp.length){ cb([]); return; }
+  var js=[], d=new Date(RATTRAPAGE.du+'T12:00:00'); while(jour(d)<=RATTRAPAGE.au){ if(d.getDay()!==0&&d.getDay()!==6) js.push(jour(d)); d.setDate(d.getDate()+1); }
+  db.collection('pointages').where('jour','>=',RATTRAPAGE.du).get().then(function(s){
+    var ann={}, vu={}; s.docs.forEach(function(x){ var p=x.data(); if(p.type==='annule') ann[p.ref]=1; });
+    s.docs.forEach(function(x){ var p=x.data(); if(p.type!=='annule'&&!ann[x.id]&&p.jour<=RATTRAPAGE.au) vu[p.membre+'|'+p.jour]=1; });
+    cb(emp.map(function(m){ return {nom:m.nom,id:m.id,manque:js.filter(function(j){ return !vu[m.id+'|'+j]; }).length}; }).filter(function(x){ return x.manque>0; }));
+  }).catch(function(){ cb([]); });
+}
+function afficherRattrapage(){
+  var el=document.getElementById('ptRattrapage'); if(!el) return;
+  rattrapageManquant(function(l){ var el2=document.getElementById('ptRattrapage'); if(!el2) return;
+    el2.innerHTML=l.length?'<div class="card" style="margin-bottom:12px;background:var(--warn-bg);border:1.5px solid var(--warn)"><b>📝 À faire : les heures du 1er au 10 novembre</b><p class="sub" style="margin:4px 0 8px">Le pointage a commencé le 11 novembre. Pour savoir ce que les heures ont coûté depuis le début du mois, recopie celles de chaque employé depuis le 1er novembre (pas les tiennes). Un jour où il n’est pas venu : « Pas venu ce jour-là ». Encore à recopier : '+l.map(function(x){ return '<b>'+esc(x.nom)+'</b> '+x.manque+' jour'+(x.manque>1?'s':''); }).join(' · ')+'.</p><button class="btn prim" id="ptRattraper">Recopier les heures maintenant</button></div>':'';
+  });
+}
 /* ---------- recopier une feuille d'heures papier (jours passés) ---------- */
-function vueFeuilleHeures(){
-  var gens=MEMBRES.filter(function(m){ return m.role!=='proprietaire'; });
+function vueFeuilleHeures(depuis){
+  var gens=MEMBRES.filter(function(m){ return m.role!=='proprietaire'; }).sort(function(a,b){ return (a.role==='gerant')-(b.role==='gerant'); });
   var d0=new Date(); d0.setDate(1); var debutMois=jour(d0);
   var st={membre:gens.length?gens[0].id:null, jour:null, arr:'10:00', dep:'16:00', pause:'0'}, PTS=[];
   function veille(){ var d=new Date(); d.setDate(d.getDate()-1); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return jour(d); }
@@ -431,13 +450,18 @@ function vueFeuilleHeures(){
         '<label class="f">Pause (minutes)<input class="sel" id="fhPause" inputmode="numeric" value="'+esc(st.pause)+'"></label>'+
         '<div class="f">Total<div class="sel" id="fhTot" style="display:flex;align-items:center">'+Math.floor(t/60)+' h '+(t%60?pad(t%60):'')+'</div></div></div>'+
       '<p class="sub" style="margin:8px 0 0">Laisse la pause à 0 si elle est payée.</p>'+
-      '<button class="btn prim" id="fhOk" style="margin-top:12px" '+(st.membre?'':'disabled')+'>Enregistrer et passer au jour suivant</button></div>'+
+      '<button class="btn prim" id="fhOk" style="margin-top:12px" '+(st.membre?'':'disabled')+'>Enregistrer et passer au jour suivant</button>'+
+      '<button class="btn sec" id="fhAbs" style="margin-top:8px" '+(st.membre?'':'disabled')+'>Pas venu ce jour-là</button></div>'+
       '<h3 style="margin:22px 0 8px">Déjà recopié ce mois-ci</h3><div class="card">'+(faits.length?faits.map(function(j){ var l=ptsDe(st.membre,j).sort(function(a,b){return a.tsClient-b.tsClient}); var a=l.filter(function(p){return p.type==='arrivee'})[0], d=l.filter(function(p){return p.type==='depart'}).pop();
+        if(l.length&&l.every(function(p){return p.type==='absent'})) return '<div class="pt-ligne"><span>'+esc(fmtJ(j))+' · pas venu</span><button class="btn sec" style="width:auto;padding:8px 14px" data-fcorr="'+j+'">Corriger</button></div>';
         return '<div class="pt-ligne"><span>'+esc(fmtJ(j))+' · '+esc(a?a.h:'?')+' – '+esc(d?d.h:'?')+(l.some(function(p){return p.source==='feuille'})?' <span class="sub" style="font-size:12px">feuille</span>':'')+'</span><button class="btn sec" style="width:auto;padding:8px 14px" data-fcorr="'+j+'">Corriger</button></div>'; }).join(''):'<p class="sub" style="margin:0">Rien pour l’instant.</p>')+'</div>';
   }
   function lire(){ st.jour=$('fhJour').value||st.jour; st.arr=$('fhArr').value||st.arr; st.dep=$('fhDep').value||st.dep; st.pause=String($('fhPause').value||'0'); }
   function charger(){ db.collection('pointages').where('jour','>=',debutMois).get().then(function(s){ PTS=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }); render(); }).catch(function(){ render(); }); }
-  st.jour=veille(); render(); charger();
+  st.jour=veille();
+  if(depuis){ var dd=new Date(depuis+'T12:00:00'); while(dd.getDay()===0||dd.getDay()===6) dd.setDate(dd.getDate()+1); st.jour=jour(dd);
+    var emp=gens.filter(function(m){ return m.role!=='gerant'; }); if(emp.length) st.membre=emp[0].id; }
+  render(); charger();
   $('vue').oninput=function(ev){ if(ev.target&&/^fh/.test(ev.target.id)){ lire(); var t=total(); var el=$('fhTot'); if(el) el.textContent=Math.floor(t/60)+' h '+(t%60?pad(t%60):''); } };
   $('vue').onclick=function(ev){
     var b=ev.target.closest('button'); if(!b) return;
@@ -445,6 +469,16 @@ function vueFeuilleHeures(){
     if(b.hasAttribute('data-fm')){ lire(); st.membre=b.getAttribute('data-fm'); render(); return; }
     if(b.hasAttribute('data-fcorr')){ var j=b.getAttribute('data-fcorr'), l=ptsDe(st.membre,j).sort(function(x,y){return x.tsClient-y.tsClient}); var a=l.filter(function(p){return p.type==='arrivee'})[0], d=l.filter(function(p){return p.type==='depart'}).pop(), pa=l.filter(function(p){return p.type==='pause'})[0], re=l.filter(function(p){return p.type==='reprise'})[0];
       st.jour=j; if(a) st.arr=a.h; if(d) st.dep=d.h; st.pause=String(pa&&re?Math.round((re.tsClient-pa.tsClient)/60000):0); render(); window.scrollTo(0,0); return; }
+    if(b.id==='fhAbs'){
+      lire(); var ja=st.jour; if(!ja||ja>jour()){ alert('Choisis un jour passé.'); return; }
+      var dj=ptsDe(st.membre,ja); if(dj.length&&!confirm(nomMembre(st.membre)+' a déjà des heures le '+fmtJ(ja)+'. Les remplacer par « pas venu » ?')) return;
+      b.disabled=true; var bt=db.batch();
+      dj.forEach(function(p){ bt.set(db.collection('pointages').doc(),{type:'annule',ref:p.__id,jour:ja,h:hhmm(),tsClient:Date.now(),par:GERANT,source:'feuille'}); });
+      bt.set(db.collection('pointages').doc(),{type:'absent',membre:st.membre,jour:ja,h:'00:00',tsClient:new Date(ja+'T00:00:00').getTime(),par:GERANT,source:'feuille'});
+      bt.commit().then(function(){ toast(nomMembre(st.membre)+' · '+fmtJ(ja)+' : pas venu'); st.jour=suivant(ja)>jour()?ja:suivant(ja); charger(); })
+        .catch(function(e){ b.disabled=false; alert('Enregistrement impossible ('+(e.code||e.message)+').'); });
+      return;
+    }
     if(b.id==='fhOk'){
       lire(); var j=st.jour, a=minutes(st.arr), dpt=minutes(st.dep), pz=parseInt(st.pause,10)||0;
       if(!j||j>jour()){ alert('Choisis un jour passé.'); return; }
@@ -468,8 +502,9 @@ function vueFeuilleHeures(){
 }
 function rendrePointage(){
   if(!document.getElementById('ptListe')){
-    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Appuie sur Arrivée, Pause ou Départ pour chaque employé : l’heure est notée tout de suite (le propriétaire la voit dans ses heures).</p><div class="card" id="ptListe"></div><div id="ptAutres"></div><button class="btn sec" id="ptFeuille" style="margin-top:14px;border:1.5px dashed var(--line);background:transparent">📝 Recopier une feuille d’heures (jours passés)</button>';
-  }
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Appuie sur Arrivée, Pause ou Départ pour chaque employé : l’heure est notée tout de suite (le propriétaire la voit dans ses heures).</p><div id="ptRattrapage"></div><div class="card" id="ptListe"></div><div id="ptAutres"></div><button class="btn sec" id="ptFeuille" style="margin-top:14px;border:1.5px dashed var(--line);background:transparent">📝 Recopier une feuille d’heures (jours passés)</button>';
+  }  if(!rendrePointage._r){ rendrePointage._r=1; afficherRattrapage(); }
+
   var auj=creneauxDuJour(jour()), prevus={}, h='';
   auj.forEach(function(c){ (prevus[c.membre]=prevus[c.membre]||[]).push(c); });
   function ligne(m){
@@ -495,7 +530,7 @@ function rendrePointage(){
   $('ptAutres').innerHTML=autres.length?'<details class="card" style="margin-top:14px"'+(planifies.length?'':' open')+'><summary style="font-weight:700;cursor:pointer">'+(planifies.length?'Autres employés':'Employés')+' ('+autres.length+')</summary>'+autres.map(ligne).join('')+'</details>':'';
 }
 document.addEventListener('click',function(ev){
-  if(ev.target.closest('#ptFeuille')){ if(unsubPt){ unsubPt(); unsubPt=null; } vueFeuilleHeures(); return; }
+  if(ev.target.closest('#ptFeuille')||ev.target.closest('#ptRattraper')){ if(unsubPt){ unsubPt(); unsubPt=null; } vueFeuilleHeures(ev.target.closest('#ptRattraper')?RATTRAPAGE.du:null); return; }
   var b=ev.target.closest('[data-pt],[data-annule]'); if(!b) return;
   if(b.hasAttribute('data-annule')){
     db.collection('pointages').add({type:'annule',ref:b.getAttribute('data-annule'),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT}).then(function(){ toast('Pointage annulé'); });
