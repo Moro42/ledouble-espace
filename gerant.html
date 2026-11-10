@@ -238,7 +238,10 @@ function etapeComptoir(suite){
   var cle='brouillon-comptoir-'+j, br=load(cle,{v:{},u:{}}); br.v=br.v||{}; br.u=br.u||{};
   function bag(p){ return p.id==='baguettes'||/baguette/i.test(p.nom||''); }
   function enCond(p){ var c=condDe(p); if(!c) return false; if(fr&&p.id===fr.id) return true; return br.u[p.id]==='cond'; }
-  function ligne(p){ var c=condDe(p), seulCond=c&&fr&&p.id===fr.id, uniteTxt=enCond(p)?pluriel(c.nom,2)+' de '+nb(c.contenu)+(seulCond?' '+(p.unite||'kg'):''):(p.unite||'pièces');
+  function ligne(p){ var ts=taillesDe(p);
+    if(ts.length&&fr&&p.id===fr.id){ var cc=condDe(p); return ts.map(function(x){ var k=p.id+'@'+x; return '<div class="cline" style="grid-template-columns:1fr 190px;padding:6px 0;border-bottom:1px solid var(--surface2)"><span><b>'+esc(p.nom)+'</b><br><span class="sub" style="margin:0;font-size:14px">'+esc(pluriel(cc.nom,2))+' de '+nb(x)+' '+esc(p.unite||'kg')+'</span></span>'+
+      '<div class="step" style="grid-template-columns:52px 1fr 52px;height:54px"><button data-cm="'+k+'" aria-label="Un de moins">−</button><input inputmode="decimal" data-cq="'+k+'" value="'+esc(br.v[k]!=null?String(br.v[k]):'')+'" placeholder="—"><button data-cp="'+k+'" aria-label="Un de plus">+</button></div></div>'; }).join(''); }
+    var c=condDe(p), seulCond=c&&fr&&p.id===fr.id, uniteTxt=enCond(p)?pluriel(c.nom,2)+' de '+nb(c.contenu)+(seulCond?' '+(p.unite||'kg'):''):(p.unite||'pièces');
     return '<div class="cline" style="grid-template-columns:1fr 190px;padding:6px 0;border-bottom:1px solid var(--surface2)"><span><b>'+esc(p.nom)+'</b><br>'+
       (c&&!seulCond?'<span class="chips" style="margin-top:4px"><button class="chip'+(enCond(p)?'':' on')+'" data-cu="'+p.id+'|base" style="padding:4px 10px;font-size:13px">'+esc(p.unite||'pièces')+'</button><button class="chip'+(enCond(p)?' on':'')+'" data-cu="'+p.id+'|cond" style="padding:4px 10px;font-size:13px">'+esc(pluriel(c.nom,2))+' de '+nb(c.contenu)+'</button></span>'
         :'<span class="sub" style="margin:0;font-size:14px">'+esc(uniteTxt)+(bag(p)?' · jetées ce soir':'')+'</span>')+'</span>'+
@@ -259,7 +262,9 @@ function etapeComptoir(suite){
     if(b.id==='cpPasse'){ if(!confirm('Le comptoir ne sera pas compté ce soir. Continuer vers le tiroir ?')) return; $('modal').onclick=null; fermerModal(); suite(); return; }
     if(b.id==='cpOk'){
       lireTout(); var lignes=[], vides=[];
-      liste.forEach(function(p){ var v=br.v[p.id]; if(v==null){ vides.push(p.nom); return; } var c=condDe(p), q=enCond(p)&&c?v*c.contenu:v; lignes.push({produit:p.id,qte:Math.round(q*1000)/1000}); });
+      liste.forEach(function(p){ var ts=taillesDe(p);
+        if(ts.length&&fr&&p.id===fr.id){ var tot=0, vu=false; ts.forEach(function(x){ var vv=br.v[p.id+'@'+x]; if(vv!=null){ vu=true; tot+=vv*x; } }); if(!vu){ vides.push(p.nom); return; } lignes.push({produit:p.id,qte:Math.round(tot*1000)/1000}); return; }
+        var v=br.v[p.id]; if(v==null){ vides.push(p.nom); return; } var c=condDe(p), q=enCond(p)&&c?v*c.contenu:v; lignes.push({produit:p.id,qte:Math.round(q*1000)/1000}); });
       if(!lignes.length){ alert('Aucun produit compté. Compte au moins un produit, ou appuie sur « Je ne peux pas compter ce soir ».'); return; }
       if(vides.length&&!confirm('Pas compté : '+vides.join(', ')+'.\n\nContinuer quand même ?')) return;
       b.disabled=true; $('cpPasse').disabled=true;
@@ -608,7 +613,12 @@ function saisieLignes(type,fourChoisi){
       var q=stockDe(p.id), conseil='';
       if(type==='commande'){ var cible=p.cible!=null?p.cible:(p.seuil!=null?p.seuil*2:null); if(cible!=null&&q!=null) conseil=Math.max(0,Math.ceil(cible-q)); }
       var val=type==='inventaire'?'':(type==='commande'?(conseil===''?0:conseil):0);
-      var cd=condDe(p);
+      var cd=condDe(p), ts=taillesDe(p);
+      if(ts.length){   // plusieurs tailles de sac : un compteur par taille
+        var pas=function(k,v){ return ts.map(function(x){ return '<div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;margin-top:4px"><span class="sub" style="margin:0;font-size:13px">'+nb(x)+' '+esc(p.unite||'')+'</span><div class="step"><button data-m="'+k+'@'+x+'">−</button><input inputmode="decimal" data-q="'+k+'@'+x+'" value="'+v+'" placeholder="—"><button data-p="'+k+'@'+x+'">+</button></div></div>'; }).join(''); };
+        if(type==='inventaire') return '<div class="inv-ligne"><b>'+esc(p.nom)+'</b><span class="sub">en '+esc(pluriel(cd.nom,2))+'</span><div class="inv-champs"><label>Réserve'+pas(p.id,'')+'</label><label>Comptoir'+pas('c_'+p.id,'')+'</label></div></div>';
+        return '<div class="cline st-line" style="align-items:start"><span><b>'+esc(p.nom)+'</b><br><span class="sub">stock : '+(q==null?'?':esc(fmtCond(q,p)))+'</span></span><div>'+pas(p.id,val)+'</div><span class="t">'+esc(pluriel(cd.nom,2))+'</span></div>';
+      }
       if(type==='inventaire') return '<div class="inv-ligne"><b>'+esc(p.nom)+'</b><span class="sub">'+esc(cd?'en '+pluriel(cd.nom,2)+' ('+nb(cd.contenu)+' '+(p.unite||'')+')':'en '+(p.unite||'unités'))+'</span>'+
         '<div class="inv-champs"><label>Réserve<div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="" placeholder="—"><button data-p="'+p.id+'">+</button></div></label>'+
         '<label>Comptoir<div class="step"><button data-m="c_'+p.id+'">−</button><input inputmode="decimal" data-q="c_'+p.id+'" data-comptoir="'+p.id+'" value="" placeholder="—"><button data-p="c_'+p.id+'">+</button></div></label></div></div>';
@@ -625,16 +635,17 @@ function saisieLignes(type,fourChoisi){
     var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
     if(m||p){ var inp=document.querySelector('[data-q="'+(m||p)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; n=Math.max(0,n+(p?1:-1)); inp.value=n; return; }
     if(b.id==='stOk'){
-      var lignes=[];
+      var lignes=[], res={}, cpt={}, ordre=[];
       Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(inp){
-        if(inp.hasAttribute('data-comptoir')) return;
-        var v=String(inp.value).trim(), cIn=document.querySelector('[data-comptoir="'+inp.getAttribute('data-q')+'"]'), vc=cIn?String(cIn.value).trim():'';
-        var reserveVide=(v===''&&type==='inventaire'&&vc!=='');
-        if(reserveVide) v='0';
-        if(v==='') return; var n=parseFloat(v.replace(',','.')); if(isNaN(n)) return;
-        var pp=produitId(inp.getAttribute('data-q')); n=Math.round(enBase(n,pp,'cond')*1000)/1000;
-        var ligne={produit:inp.getAttribute('data-q'),qte:reserveVide?null:n};
-        if(type==='inventaire'&&vc!==''){ var nc=parseFloat(vc.replace(',','.')); if(!isNaN(nc)) ligne.comptoir=Math.round(enBase(nc,pp,'cond')*1000)/1000; }
+        var k=inp.getAttribute('data-q'), estC=k.indexOf('c_')===0, k2=estC?k.slice(2):k, x=k2.split('@'), pid=x[0], t=x[1]?parseFloat(x[1]):null;
+        var v=String(inp.value).trim(); if(v==='') return; var n=parseFloat(v.replace(',','.')); if(isNaN(n)) return;
+        var base=t?n*t:enBase(n,produitId(pid),'cond'), o=estC?cpt:res;
+        if(ordre.indexOf(pid)<0) ordre.push(pid); o[pid]=(o[pid]||0)+base;
+      });
+      ordre.forEach(function(pid){
+        var reserveVide=(type==='inventaire'&&res[pid]==null&&cpt[pid]!=null), n=Math.round((res[pid]||0)*1000)/1000;
+        var ligne={produit:pid,qte:reserveVide?null:n};
+        if(type==='inventaire'&&cpt[pid]!=null) ligne.comptoir=Math.round(cpt[pid]*1000)/1000;
         if(type==='inventaire' || n>0) lignes.push(ligne);
       });
       if(!lignes.length){ alert('Aucune quantité saisie.'); return; }
@@ -678,7 +689,7 @@ function vuePertes(){
         '<p class="sub">Produit</p><div class="chips">'+STOCKCFG.produits.map(function(p){ return '<button class="chip'+(produit===p.id?' on':'')+'" data-prod="'+p.id+'">'+esc(p.nom)+'</button>'; }).join('')+'</div>'+
         (STOCKCFG.produits.length?'':'<div class="card"><p class="sub" style="margin:0">La liste des produits n’a pas encore été créée par le propriétaire.</p></div>')+
         '<p class="sub" style="margin-top:14px">D’où vient la perte ?</p><div class="chips"><button class="chip'+(source==='comptoir'?' on':'')+'" data-src="comptoir">Du comptoir (déjà sorti, pas réutilisable)</button><button class="chip'+(source==='reserve'?' on':'')+'" data-src="reserve">De la réserve</button></div>'+
-        '<p class="sub" style="margin-top:14px">Quantité</p>'+(produit?choixUnite(produitId(produit),unite):'')+'<div class="step" style="max-width:320px;margin-top:8px"><button data-m="q">−</button><input inputmode="decimal" data-q="q" value="1"><button data-p="q">+</button></div>'+
+        '<p class="sub" style="margin-top:14px">Quantité</p>'+(produit?choixUnite(produitId(produit),unite):'')+'<div style="max-width:420px;margin-top:8px">'+(produit?champsQte('q',produitId(produit),unite,1):'<div class="step" style="max-width:320px"><button data-m="q">−</button><input inputmode="decimal" data-q="q" value="1"><button data-p="q">+</button></div>')+'</div>'+
         '<p class="sub" style="margin-top:14px">Raison</p><div class="chips">'+MOTIFS.map(function(m){ return '<button class="chip'+(motif===m?' on':'')+'" data-motif="'+m+'">'+m+'</button>'; }).join('')+'</div>'+
         '<label class="f" style="margin-top:12px">Précision (facultatif)<input class="sel" id="peNote" maxlength="200"></label>'+
         '<button class="btn prim" id="peOk" style="margin-top:12px" '+(produit?'':'disabled')+'>Enregistrer la perte</button>';
@@ -686,14 +697,16 @@ function vuePertes(){
     render();
     $('vue').onclick=function(ev){
       var b=ev.target.closest('button'); if(!b) return;
-      if(b.hasAttribute('data-prod')){ var q=document.querySelector('[data-q="q"]').value; produit=b.getAttribute('data-prod'); unite='cond'; render(); document.querySelector('[data-q="q"]').value=q; return; }
-      if(b.hasAttribute('data-unite')){ var qu=document.querySelector('[data-q="q"]').value; unite=b.getAttribute('data-unite'); render(); document.querySelector('[data-q="q"]').value=qu; return; }
-      if(b.hasAttribute('data-src')){ var qs=document.querySelector('[data-q="q"]').value; source=b.getAttribute('data-src'); render(); document.querySelector('[data-q="q"]').value=qs; return; }
-      if(b.hasAttribute('data-motif')){ var q2=document.querySelector('[data-q="q"]').value; motif=b.getAttribute('data-motif'); render(); document.querySelector('[data-q="q"]').value=q2; return; }
+      function garde(){ var o={}; Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(i){ o[i.getAttribute('data-q')]=i.value; }); return o; }
+      function remet(o){ Object.keys(o).forEach(function(k){ remetQ(k,o[k]); }); }
+      if(b.hasAttribute('data-prod')){ var q=valQ('q'); produit=b.getAttribute('data-prod'); unite='cond'; render(); remetQ('q',q); return; }
+      if(b.hasAttribute('data-unite')){ var qu=valQ('q'); unite=b.getAttribute('data-unite'); render(); remetQ('q',qu); return; }
+      if(b.hasAttribute('data-src')){ var qs=garde(); source=b.getAttribute('data-src'); render(); remet(qs); return; }
+      if(b.hasAttribute('data-motif')){ var q2=garde(); motif=b.getAttribute('data-motif'); render(); remet(q2); return; }
       var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
-      if(m||p){ var inp=document.querySelector('[data-q="q"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
+      if(m||p){ var inp=document.querySelector('[data-q="'+(m||p)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
       if(b.id==='peOk'){
-        var n2=enBase(parseFloat(String(document.querySelector('[data-q="q"]').value).replace(',','.')),produitId(produit),unite); n2=Math.round(n2*1000)/1000;
+        var n2=lireQte('q',produitId(produit),unite);
         if(!(n2>0)){ alert('Quantité invalide.'); return; }
         b.disabled=true;
         db.collection('stock_mvts').add({type:'perte',source:source,lignes:[{produit:produit,qte:n2}],motif:motif,note:$('peNote').value.trim(),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
@@ -795,14 +808,29 @@ function nb(v){ return String(Math.round(v*100)/100).replace('.',','); }
 /* « 4 sacs (10 kg) », « 1 boîte + 4 pièces (34 pièces) » */
 function fmtCond(q,p){
   var base=nb(q)+' '+((p&&p.unite)||''), c=condDe(p); if(!c||q==null) return q==null?'?':base;
+  if(taillesDe(p).length) return base;   // plusieurs tailles de sac : le total en kg est plus clair
   if(q<c.contenu-1e-9) return base;   // moins d'un conditionnement (ou stock négatif) : l'unité de base suffit
   var n=Math.floor(q/c.contenu+1e-9), reste=Math.round((q-n*c.contenu)*100)/100;
   var t=(n?n+' '+pluriel(c.nom,n):'')+(reste?(n?' + ':'')+nb(reste)+' '+(p.unite||''):''); return (t||'0 '+c.nom)+' ('+base+')';
 }
 /* sélecteur d'unité pour un produit avec conditionnement */
 function choixUnite(p,unite){ var c=condDe(p); if(!c) return '<span class="sub">'+esc((p&&p.unite)||'')+'</span>';
-  return '<div class="chips" style="margin-top:8px"><button class="chip'+(unite!=='base'?' on':'')+'" data-unite="cond">en '+esc(pluriel(c.nom,2))+' ('+nb(c.contenu)+' '+esc(p.unite||'')+')</button><button class="chip'+(unite==='base'?' on':'')+'" data-unite="base">en '+esc(p.unite||'unités')+'</button></div>'; }
+  var ts=taillesDe(p);
+  return '<div class="chips" style="margin-top:8px"><button class="chip'+(unite!=='base'?' on':'')+'" data-unite="cond">en '+esc(pluriel(c.nom,2))+' ('+(ts.length?ts.map(nb).join(' ou '):nb(c.contenu))+' '+esc(p.unite||'')+')</button><button class="chip'+(unite==='base'?' on':'')+'" data-unite="base">en '+esc(p.unite||'unités')+'</button></div>'; }
 function enBase(v,p,unite){ var c=condDe(p); return (c&&unite!=='base')?v*c.contenu:v; }
+/* plusieurs tailles de conditionnement (ex. frites en sacs de 2,5 kg et de 3,5 kg) : une liste, ou [] s'il n'y en a qu'une */
+function taillesDe(p){ var c=condDe(p); if(!c) return []; var t=[c.contenu]; (p.tailles||[]).forEach(function(x){ x=parseFloat(x); if(x>0&&t.indexOf(x)<0) t.push(x); }); return t.length>1?t:[]; }
+/* champ de quantité : un compteur par taille quand il y en a plusieurs (clé « prefixe@taille »), sinon le compteur habituel */
+function champsQte(k,p,unite,val,style){ var t=taillesDe(p), c=condDe(p);
+  if(t.length&&unite!=='base') return '<div style="display:grid;gap:8px">'+t.map(function(x,i){ return '<div style="display:grid;grid-template-columns:1fr 200px;align-items:center;gap:8px"><span>'+esc(maj1(pluriel(c.nom,2)))+' de '+nb(x)+' '+esc(p.unite||'')+'</span><div class="step"'+(style?' style="'+style+'"':'')+'><button data-m="'+k+'@'+x+'">−</button><input inputmode="decimal" data-q="'+k+'@'+x+'" value="'+(i===0?val:0)+'"><button data-p="'+k+'@'+x+'">+</button></div></div>'; }).join('')+'</div>';
+  return '<div class="step"'+(style?' style="'+style+'"':'')+'><button data-m="'+k+'">−</button><input inputmode="decimal" data-q="'+k+'" value="'+val+'"><button data-p="'+k+'">+</button></div>'; }
+/* lit un champ de quantité et renvoie la quantité dans l'unité de base (kg, pièces…) */
+function lireQte(k,p,unite){ var t=taillesDe(p);
+  if(t.length&&unite!=='base'){ var tot=0, vu=false; t.forEach(function(x){ var el=document.querySelector('[data-q="'+k+'@'+x+'"]'); if(!el) return; var n=n2g(el.value); if(n>0){ tot+=n*x; vu=true; } }); return vu?Math.round(tot*1000)/1000:0; }
+  var el=document.querySelector('[data-q="'+k+'"]'); return el?Math.round(enBase(n2g(el.value),p,unite)*1000)/1000:0; }
+function maj1(t){ t=String(t||''); return t.charAt(0).toUpperCase()+t.slice(1); }
+function valQ(k){ var el=document.querySelector('[data-q="'+k+'"]'); return el?el.value:null; }
+function remetQ(k,v){ var el=document.querySelector('[data-q="'+k+'"]'); if(el&&v!=null) el.value=v; }
 function vueLivraison(){
   chargerStock(function(){
     chargerRelais().then(function(){
@@ -883,7 +911,9 @@ function livraisonManuelle(){
   function render(){
     var prods=STOCKCFG.produits.concat(ajoutes);
     $('vue').innerHTML='<button class="back" data-go="livraison">‹ Retour</button><h2>Ajouter au stock</h2><p class="sub">Pas besoin de fournisseur. Laisse 0 pour ce qui n’est pas arrivé.</p><div class="card">'+
-      (prods.length?prods.map(function(p){ var cd=condDe(p); return '<div class="cline st-line"><span><b>'+esc(p.nom)+'</b>'+(p.nouveau?' <span class="nouveau">nouveau</span>':'')+(cd?'<br><span class="sub">'+esc(cd.nom)+' de '+nb(cd.contenu)+' '+esc(p.unite||'')+'</span>':'')+'</span><div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="'+(p._q||0)+'"><button data-p="'+p.id+'">+</button></div><span class="t">'+esc(cd?pluriel(cd.nom,2):(p.unite||''))+'</span></div>'; }).join(''):'<p class="sub" style="margin:0">Aucun produit pour l’instant : ajoute le premier.</p>')+'</div>'+
+      (prods.length?prods.map(function(p){ var cd=condDe(p), ts=taillesDe(p);
+        if(ts.length) return '<div class="cline st-line" style="align-items:start"><span><b>'+esc(p.nom)+'</b><br><span class="sub">en '+esc(pluriel(cd.nom,2))+'</span></span><div>'+ts.map(function(x){ var k=p.id+'@'+x; return '<div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;margin-top:4px"><span class="sub" style="margin:0;font-size:13px">'+nb(x)+' '+esc(p.unite||'')+'</span><div class="step"><button data-m="'+k+'">−</button><input inputmode="decimal" data-q="'+k+'" value="0"><button data-p="'+k+'">+</button></div></div>'; }).join('')+'</div><span class="t">'+esc(pluriel(cd.nom,2))+'</span></div>';
+        return '<div class="cline st-line"><span><b>'+esc(p.nom)+'</b>'+(p.nouveau?' <span class="nouveau">nouveau</span>':'')+(cd?'<br><span class="sub">'+esc(cd.nom)+' de '+nb(cd.contenu)+' '+esc(p.unite||'')+'</span>':'')+'</span><div class="step"><button data-m="'+p.id+'">−</button><input inputmode="decimal" data-q="'+p.id+'" value="'+(p._q||0)+'"><button data-p="'+p.id+'">+</button></div><span class="t">'+esc(cd?pluriel(cd.nom,2):(p.unite||''))+'</span></div>'; }).join(''):'<p class="sub" style="margin:0">Aucun produit pour l’instant : ajoute le premier.</p>')+'</div>'+
       '<button class="btn sec" id="manNouveau" style="margin-top:12px;border:1.5px dashed var(--line);background:transparent">+ Nouveau produit</button>'+
       '<button class="btn prim" id="manOk" style="margin-top:12px;min-height:64px">Ajouter au stock</button>';
   }
@@ -903,7 +933,8 @@ function livraisonManuelle(){
       return;
     }
     if(b.id==='manOk'){
-      var lg=[]; Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(i){ var id=i.getAttribute('data-q'), pp=produitId(id), q=n2g(i.value); q=Math.round(enBase(q,pp,'cond')*1000)/1000; if(q>0) lg.push({produit:id,qte:q}); });
+      var lg=[], parP={}, ordreP=[]; Array.prototype.forEach.call(document.querySelectorAll('[data-q]'),function(i){ var x=i.getAttribute('data-q').split('@'), id=x[0], t=x[1]?parseFloat(x[1]):null, pp=produitId(id), q=n2g(i.value); q=t?q*t:enBase(q,pp,'cond'); if(!(q>0)) return; if(ordreP.indexOf(id)<0) ordreP.push(id); parP[id]=(parP[id]||0)+q; });
+      ordreP.forEach(function(id){ lg.push({produit:id,qte:Math.round(parP[id]*1000)/1000}); });
       if(!lg.length){ alert('Aucune quantité saisie.'); return; }
       b.disabled=true;
       var nv=ajoutes.filter(function(a){ return lg.some(function(l){return l.produit===a.id}); }).map(function(a){ return {id:a.id,nom:a.nom,unite:a.unite,actif:true,cree:'gerant'}; });
@@ -927,18 +958,18 @@ function vueSorties(){
         '<div class="card"><div class="chips">'+STOCKCFG.produits.map(function(p){ return '<button class="chip'+(choisi===p.id?' on':'')+'" data-sp="'+p.id+'">'+esc(p.nom)+'</button>'; }).join('')+'</div>'+
         (STOCKCFG.produits.length?'':'<p class="sub" style="margin:0">Aucun produit : ajoute-les depuis « Livraison → Saisie manuelle ».</p>')+
         (choisi?choixUnite(produitId(choisi),unite):'')+
-        '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px"><div class="step"><button data-m="sq">−</button><input inputmode="decimal" data-q="sq" value="1"><button data-p="sq">+</button></div><button class="btn prim" id="soNoter" style="width:auto;padding:0 26px" '+(choisi?'':'disabled')+'>Noter</button></div></div>'+
+        '<div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:12px">'+(choisi?champsQte('sq',produitId(choisi),unite,1):'<div class="step"><button data-m="sq">−</button><input inputmode="decimal" data-q="sq" value="1"><button data-p="sq">+</button></div>')+'<button class="btn prim" id="soNoter" style="width:auto;padding:0 26px" '+(choisi?'':'disabled')+'>Noter</button></div></div>'+
         '<h3 style="margin:22px 0 8px">Déjà sorti aujourd’hui</h3><div class="card">'+(Object.keys(tot).length?Object.keys(tot).map(function(id){ return '<div class="pt-ligne"><b>'+esc(nomP(id))+'</b><b class="num">'+esc(fmtCond(tot[id],produitId(id)))+'</b></div>'; }).join(''):'<p class="sub" style="margin:0">Rien pour l’instant.</p>')+'</div>'+
         (ajd.length?'<h3 style="margin:22px 0 8px">Détail</h3><div class="card">'+ajd.map(function(m){ var l=(m.lignes||[])[0]||{}; return '<div class="pt-ligne"><span>'+esc(m.h)+' · '+esc(nomP(l.produit))+' +'+esc(fmtCond(l.qte,produitId(l.produit)))+'</span><button class="btn sec" style="width:auto;padding:8px 14px" data-socorr="'+m.__id+'">Corriger</button></div>'; }).join('')+'</div>':'');
     }
     render();
     $('vue').onclick=function(ev){
       var b=ev.target.closest('button'); if(!b) return;
-      if(b.hasAttribute('data-sp')){ var q=document.querySelector('[data-q="sq"]').value; choisi=b.getAttribute('data-sp'); unite='cond'; render(); document.querySelector('[data-q="sq"]').value=q; return; }
-      if(b.hasAttribute('data-unite')){ var q3=document.querySelector('[data-q="sq"]').value; unite=b.getAttribute('data-unite'); render(); document.querySelector('[data-q="sq"]').value=q3; return; }
+      if(b.hasAttribute('data-sp')){ var q=valQ('sq'); choisi=b.getAttribute('data-sp'); unite='cond'; render(); remetQ('sq',q); return; }
+      if(b.hasAttribute('data-unite')){ var q3=valQ('sq'); unite=b.getAttribute('data-unite'); render(); remetQ('sq',q3); return; }
       var m=b.getAttribute('data-m'), p=b.getAttribute('data-p');
-      if(m||p){ var inp=document.querySelector('[data-q="sq"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
-      if(b.id==='soNoter'){ var q2=enBase(n2g(document.querySelector('[data-q="sq"]').value),produitId(choisi),unite); q2=Math.round(q2*1000)/1000; if(!(q2>0)){ alert('Quantité invalide.'); return; } b.disabled=true;
+      if(m||p){ var inp=document.querySelector('[data-q="'+(m||p)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(p?1:-1)); return; }
+      if(b.id==='soNoter'){ var q2=lireQte('sq',produitId(choisi),unite); if(!(q2>0)){ alert('Quantité invalide.'); return; } b.disabled=true;
         db.collection('stock_mvts').add({type:'consommation',lignes:[{produit:choisi,qte:q2}],jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
           .then(function(r){ MVTS.push({__id:r.id,type:'consommation',lignes:[{produit:choisi,qte:q2}],jour:jour(),h:hhmm(),tsClient:Date.now()}); toast('Noté'); render(); })
           .catch(function(e){ b.disabled=false; alert('Enregistrement impossible ('+(e.code||e.message)+')'); }); return; }
@@ -946,7 +977,7 @@ function vueSorties(){
         var id=b.getAttribute('data-socorr'), mv=MVTS.filter(function(x){return x.__id===id})[0], l=(mv&&mv.lignes||[])[0]||{};
         if(!confirm('Annuler cette sortie ? Tu pourras la noter à nouveau avec la bonne quantité.')) return;
         db.collection('stock_mvts').add({type:'annule_mvt',ref:id,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
-          .then(function(r){ MVTS.push({__id:r.id,type:'annule_mvt',ref:id,jour:jour(),tsClient:Date.now()}); choisi=l.produit||null; render(); if(l.qte) document.querySelector('[data-q="sq"]').value=l.qte; toast('Sortie annulée : corrige la quantité puis « Noter »'); if(l.qte){ unite='base'; render(); document.querySelector('[data-q="sq"]').value=l.qte; } })
+          .then(function(r){ MVTS.push({__id:r.id,type:'annule_mvt',ref:id,jour:jour(),tsClient:Date.now()}); choisi=l.produit||null; render(); toast('Sortie annulée : corrige la quantité puis « Noter »'); if(l.qte){ unite='base'; render(); remetQ('sq',l.qte); } })
           .catch(function(e){ alert('Correction impossible ('+(e.code||e.message)+')'); });
       }
     };
