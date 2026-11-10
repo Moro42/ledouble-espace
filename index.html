@@ -387,7 +387,6 @@ body.connecte .ass-fab{display:block}
       <div class="card" id="faRegistre"><div class="empty">Chargement…</div></div>
       <h3>Prix d’achat des produits</h3>
       <div class="card" id="fiPrix"><div class="empty">Chargement…</div></div>
-      <button class="btn small sec" id="fiReprendre" style="margin-top:10px">Reprendre les prix de toutes les factures</button>
       <h3>Marge de chaque produit vendu</h3>
       <div class="card" id="fiMarges"><div class="empty">Chargement…</div></div>
       <p class="note" style="margin-top:18px">Charges fixes mensuelles : dans ⚙ Paramètres.</p>
@@ -1182,7 +1181,7 @@ function rendreATraiter(){
     // prix d'achat
     var noms={}; (SC.produits||[]).forEach(function(p){ noms[p.id]=p.nom; });
     var aConf=[], sauts=[];
-    Object.keys(PRIX.produits||{}).forEach(function(id){ var x=PRIX.produits[id]; if(!x) return; if(x.aConfirmer) aConf.push(noms[id]||id);
+    Object.keys(PRIX.produits||{}).forEach(function(id){ var x=PRIX.produits[id]; if(!x) return; /* prix fixés à la main : plus de propositions venant des factures */
       var h=x.historique||[]; if(h.length>=2){ var a=h[h.length-2].prix, b=h[h.length-1].prix; if(a&&b&&(b>a*1.5||b<a/1.5)&&String(h[h.length-1].date||'')>=jour(new Date(Date.now()-30*864e5))) sauts.push((noms[id]||id)+' '+eur(a)+' → '+eur(b)); } });
     if(aConf.length) it.push({n:aConf.length,txt:'Prix d’achat à confirmer',sous:esc(aConf.join(', ')),v:'factures',cible:'fiPrix'});
     if(sauts.length) it.push({n:sauts.length,txt:'Prix d’achat qui ont fortement changé : à vérifier',sous:esc(sauts.join(' · ')),v:'factures',cible:'fiPrix'});
@@ -2894,7 +2893,8 @@ function reprendrePrixFactures(toutes){
 var FIN={mois:null,charges:[]};
 function initFinances(){ FIN.mois=jour().slice(0,7); $('fiMois').value=FIN.mois; rendreFinances(true); }
 function rendreFinances(reprendre){
-  (PRIX_CHARGE?Promise.resolve():chargerPrix()).then(function(){ return reprendre?reprendrePrixFactures(false).catch(function(){}):null; }).then(function(){
+  // les prix d'achat sont fixés à la main par Hicham : plus aucune reprise automatique depuis les factures
+  (PRIX_CHARGE?Promise.resolve():chargerPrix()).then(function(){
     return Promise.all([cfgSnap('stock'),cfgSnap('finances'),cfgSnap('carte')]);
   }).then(function(r){
     SC=r[0].exists?r[0].data():{produits:[],fournisseurs:[]}; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[];
@@ -2909,10 +2909,10 @@ function rendrePrixAchat(){
     if(h.length>=2){ var a=h[h.length-2].prix, b=h[h.length-1].prix, pc=a?(b-a)*100/a:0; ev='<span style="color:'+(pc>0?'var(--danger)':'var(--ok)')+'">'+eur(a)+' → '+eur(b)+' le '+esc(String(h[h.length-1].date).slice(8,10)+'/'+String(h[h.length-1].date).slice(5,7))+' ('+(pc>0?'+':'')+pc.toFixed(1).replace('.',',')+' %)</span>'; }
     else if(x.prix!=null) ev='<span class="note">stable</span>';
     return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+(x.prix!=null?eur(x.prix)+'<span class="note"> / '+esc(p.unite||'unité')+'</span>':'<span class="note">pas encore de facture</span>')+'</td><td>'+ev+'</td><td>'+
-      (x.aConfirmer?'<span class="tag tir">à confirmer : '+eur(x.aConfirmer.prix)+' / '+esc(x.aConfirmer.unite||'?')+'</span> <button class="btn small sec" data-pxok="'+p.id+'">Accepter</button> <button class="btn small sec" data-pxno="'+p.id+'">Ignorer</button>':'')+
+      (false&&x.aConfirmer?'<span class="tag tir">à confirmer : '+eur(x.aConfirmer.prix)+' / '+esc(x.aConfirmer.unite||'?')+'</span> <button class="btn small sec" data-pxok="'+p.id+'">Accepter</button> <button class="btn small sec" data-pxno="'+p.id+'">Ignorer</button>':'')+
       ' <button class="btn small sec" data-pxman="'+p.id+'">Modifier</button></td></tr>';
   }).join('');
-  $('fiPrix').innerHTML=l?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Prix d’achat</th><th>Évolution</th><th></th></tr>'+l+'</table></div><p class="note">Mis à jour automatiquement avec chaque facture (validée par toi ou photographiée par le gérant). Quand la facture ne permet pas de ramener le prix à l’unité du stock, il est marqué « à confirmer ».</p>':'<div class="empty">Aucun produit dans le stock.</div>';
+  $('fiPrix').innerHTML=l?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Prix d’achat</th><th>Évolution</th><th></th></tr>'+l+'</table></div><p class="note">Prix fixés à la main avec « Modifier » (prix par unité du stock, ex. hamburger 0,26 € la pièce). Les factures ne changent plus jamais ces prix.</p>':'<div class="empty">Aucun produit dans le stock.</div>';
 }
 function rendreResultat(){
   var mois=$('fiMois').value||jour().slice(0,7), du=mois+'-01', au=mois+'-31', tva=REGC.tvaVentes!=null?REGC.tvaVentes:6;
