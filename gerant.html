@@ -165,6 +165,7 @@ function accueil(){
     tile('ouverture','Ouverture','Vérifier le fond de caisse',bOuv,e.ouverture?'':'main')+
     tile('livraison','Livraison','Photo de la facture ou saisie','','main')+
     tile('sorties','Sorties du jour','Ce qui sort de la réserve','','main')+
+    tile('pointage','Pointage','Arrivée, pause, départ','')+
     tile('planning','Planning','Semaine de l’équipe, propositions','')+
     tile('stock','Stock','Niveaux, inventaire','')+
     tile('pertes','Pertes','Invendus, périmés, casse','')+
@@ -177,7 +178,7 @@ document.addEventListener('click',function(ev){
   if(g==='ouverture') ouverture();
   if(g==='cloture') rappelSortiesPuisCloture();
   if(g==='accueil'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; accueil(); }
-  if(g==='pointage') vuePointage();
+  if(g==='pointage'){ $('vue').onclick=null; $('vue').oninput=null; vuePointage(); }
   if(g==='livraison'||g==='sorties'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; }
   if(g==='livraison') vueLivraison();
   if(g==='sorties') vueSorties();
@@ -408,7 +409,7 @@ function vuePointage(){
 }
 function rendrePointage(){
   if(!document.getElementById('ptListe')){
-    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Présences</h2><p class="sub">L’équipe pointe avec son badge sur la caisse. Ici, tu vois qui est là et tu peux corriger un oubli (chaque correction est visible par le propriétaire).</p><div class="card" id="ptListe"></div><div id="ptAutres"></div>';
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Appuie sur Arrivée, Pause ou Départ pour chaque employé : l’heure est notée tout de suite (le propriétaire la voit dans ses heures).</p><div class="card" id="ptListe"></div><div id="ptAutres"></div>';
   }
   var auj=creneauxDuJour(jour()), prevus={}, h='';
   auj.forEach(function(c){ (prevus[c.membre]=prevus[c.membre]||[]).push(c); });
@@ -428,10 +429,11 @@ function rendrePointage(){
     var viaBadge=e.dernier&&e.dernier.par==='badge';
     return '<div class="pt-ligne"><div><b>'+esc(m.nom)+'</b>'+(viaBadge?' <span class="sub" style="font-size:13px">· badge</span>':'')+(m.role==='gerant'?' <span class="sub">(gérant)</span>':'')+'<div class="sub" style="margin:2px 0 0">'+info+'</div>'+annul+'</div><div class="pt-actions">'+boutons+'</div></div>';
   }
-  var planifies=MEMBRES.filter(function(m){ return prevus[m.id] || etatPersonne(m.id).etat!=='absent'; });
-  var autres=MEMBRES.filter(function(m){ return planifies.indexOf(m)<0; });
-  $('ptListe').innerHTML=MEMBRES.length?(planifies.length?planifies.map(ligne).join(''):'<p class="sub" style="margin:0">Personne n’est prévu aujourd’hui.</p>'):'<p class="sub" style="margin:0">La liste de l’équipe n’a pas encore été créée par le propriétaire.</p>';
-  $('ptAutres').innerHTML=autres.length?'<details class="card" style="margin-top:14px"><summary style="font-weight:700;cursor:pointer">Autres membres de l’équipe ('+autres.length+')</summary>'+autres.map(ligne).join('')+'</details>':'';
+  var employes=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'; });   // employés seulement
+  var planifies=employes.filter(function(m){ return prevus[m.id] || etatPersonne(m.id).etat!=='absent'; });
+  var autres=employes.filter(function(m){ return planifies.indexOf(m)<0; });
+  $('ptListe').innerHTML=employes.length?(planifies.length?planifies.map(ligne).join(''):'<p class="sub" style="margin:0">Personne n’est prévu aujourd’hui : choisis dans la liste ci-dessous.</p>'):'<p class="sub" style="margin:0">La liste de l’équipe n’a pas encore été créée par le propriétaire.</p>';
+  $('ptAutres').innerHTML=autres.length?'<details class="card" style="margin-top:14px"'+(planifies.length?'':' open')+'><summary style="font-weight:700;cursor:pointer">'+(planifies.length?'Autres employés':'Employés')+' ('+autres.length+')</summary>'+autres.map(ligne).join('')+'</details>':'';
 }
 document.addEventListener('click',function(ev){
   var b=ev.target.closest('[data-pt],[data-annule]'); if(!b) return;
