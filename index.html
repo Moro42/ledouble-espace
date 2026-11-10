@@ -677,6 +677,8 @@ function demarrer(){
     memoQ('dep|'+mo,function(){ return db.collection('depenses').where('mois','==',mo).get(); }).catch(function(){}); }catch(e){} },3500);
   // préchargement discret des ventes des 60 derniers jours (seuls les jours pas encore gardés sont téléchargés)
   setTimeout(function(){ evsSnap(jour(new Date(Date.now()-60*864e5))).catch(function(){}); },5000);
+  // pointage par badge : prénoms de l'équipe envoyés à la caisse, badges associés sur la caisse rangés
+  setTimeout(function(){ try{ synchroBadgesCaisse().catch(function(){}); }catch(e){} },4000);
   setTimeout(function(){ try{ chargerFactures(); }catch(e){} },1200);
   setTimeout(function(){ try{ initStockPastille(); }catch(e){} },2000);
   setInterval(function(){ if(jourSuivi!==jour()){ suivreJour(); suivreClotures(); suivreSortiesJour(); majSortiesDirect(); } },60000);
@@ -764,6 +766,7 @@ function rendreDirect(evs,nouveaux){
     else if(x.type==='tiroir'){ tag='<span class="tag tir">Tiroir</span>'; lib=esc(x.motif)+' · '+(x.qui?esc(x.qui):(x.via==='cle'?'clé gérant':'code gérant')); }
     else if(x.type==='pointage'){ tag='<span class="tag">Pointage</span>'; lib=esc(x.nom||'')+' · '+({arrivee:'arrivée',pause:'pause',reprise:'reprise',depart:'départ'}[x.ptype]||x.ptype)+' (badge)'; }
     else if(x.type==='badge_inconnu'){ tag='<span class="tag tir">Badge</span>'; lib='Badge inconnu passé sur la caisse · à associer dans Équipe'; }
+    else if(x.type==='badge_associe'){ tag='<span class="tag">Badge</span>'; lib='Badge de pointage associé à '+esc(x.nom||'')+' (sur la caisse)'; }
     return '<div class="row'+(nouveaux['_']||isNew(x,nouveaux)?' flash':'')+'"><span class="t num">'+hhmm(x.tsClient)+'</span><span class="l">'+tag+' '+lib+'</span><b class="num">'+mt+'</b></div>';
   }).join(''):'<div class="empty">Aucune vente aujourd’hui pour l’instant. Elles apparaîtront ici en direct.</div>';
 }
@@ -1315,11 +1318,41 @@ function pointagesFusion(du,au){
   });
 }
 /* ---------- BADGES ---------- */
-var BADGES={};
-function chargerBadges(){ return db.collection('config').doc('caisse').get().then(function(s){ BADGES=(s.exists&&s.data().badges)||{}; }).catch(function(){}); }
+var BADGES={}, BADGES_RET={};
+function chargerBadges(){ return synchroBadgesCaisse().catch(function(){}); }
 function enregistrerBadges(){
   var ref=db.collection('config').doc('caisse');
-  return ref.get().then(function(s){ return s.exists?ref.update({badges:BADGES}):ref.set({badges:BADGES}); });
+  return ref.get().then(function(s){ var p={badges:BADGES,badgesRetires:BADGES_RET}; return s.exists?ref.update(p):ref.set(p); });
+}
+/* Pointage par badge (caisse v15) : la caisse reçoit la liste des prénoms (config/caisse.equipe, sans les coûts),
+   et les badges associés sur la caisse (événements « badge_associe ») sont rangés dans config/caisse.badges.
+   Pour un même badge, l'information la plus récente (ts) l'emporte ; un badge retiré est noté dans badgesRetires. */
+function jsonStable(o){ if(o===null||typeof o!=='object') return JSON.stringify(o); if(Array.isArray(o)) return '['+o.map(jsonStable).join(',')+']'; return '{'+Object.keys(o).sort().map(function(k){ return JSON.stringify(k)+':'+jsonStable(o[k]); }).join(',')+'}'; }
+function synchroBadgesCaisse(){
+  return Promise.all([db.collection('config').doc('caisse').get(),db.collection('config').doc('equipe').get(),db.collection('evenements').where('type','==','badge_associe').get()]).then(function(r){
+    var c=r[0].exists?r[0].data():{}, badges=JSON.parse(JSON.stringify(c.badges||{})), ret=JSON.parse(JSON.stringify(c.badgesRetires||{}));
+    var membres=r[1].exists?(r[1].data().membres||[]):[], roles={}; membres.forEach(function(m){ roles[m.id]=m.role||''; });
+    r[2].docs.map(function(d){ return d.data(); }).filter(function(x){ return x.code&&x.membre; }).sort(function(a,b){ return (Number(a.ts)||0)-(Number(b.ts)||0); }).forEach(function(x){
+      var ts=Number(x.ts)||0, code=String(x.code), cur=Math.max(Number(badges[code]&&badges[code].ts)||0,Number(ret[code])||0);
+      if(ts<=cur) return;
+      for(var k in badges) if(k!==code && badges[k].membre===x.membre && (Number(badges[k].ts)||0)<ts){ delete badges[k]; ret[k]=ts; }
+      badges[code]={membre:String(x.membre),nom:String(x.nom||''),role:roles[x.membre]||'',ts:ts}; delete ret[code];
+    });
+    var equipe=membres.filter(function(m){ return m.actif!==false; }).map(function(m){ return {id:m.id,nom:m.nom,role:m.role||''}; });
+    var patch={};
+    if(jsonStable(badges)!==jsonStable(c.badges||{})) patch.badges=badges;
+    if(jsonStable(ret)!==jsonStable(c.badgesRetires||{})) patch.badgesRetires=ret;
+    if(jsonStable(equipe)!==jsonStable(c.equipe||[])) patch.equipe=equipe;
+    BADGES=badges; BADGES_RET=ret;
+    if(!Object.keys(patch).length) return;
+    var ref=db.collection('config').doc('caisse'); return r[0].exists?ref.update(patch):ref.set(patch);
+  });
+}
+function ligneBadge(m){
+  if(m.actif===false) return '';
+  var k=badgeDe(m.id); if(!k) return '<br><span class="note">Aucun badge · à associer sur la caisse (menu gérant → Badges de pointage)</span>';
+  var ts=Number(BADGES[k].ts)||0, d=ts?new Date(ts):null;
+  return '<br><span class="note">Badge de pointage associé'+(d?' le '+String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'):'')+'</span>';
 }
 function badgeDe(id){ for(var k in BADGES) if(BADGES[k].membre===id) return k; return null; }
 function rendreBadgesInconnus(liste){
@@ -1346,7 +1379,7 @@ document.addEventListener('click',function(e){
   if(b.hasAttribute('data-badgex')){
     var id=b.getAttribute('data-badgex'), k=badgeDe(id), mm=EQ.membres.filter(function(x){return x.id===id})[0];
     if(!k||!confirm('Retirer le badge de '+(mm?mm.nom:'ce membre')+' ? Il ne pourra plus pointer avec.')) return;
-    delete BADGES[k]; enregistrerBadges().then(function(){ toast('Badge retiré'); rendreMembres(); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
+    delete BADGES[k]; BADGES_RET[k]=Date.now(); enregistrerBadges().then(function(){ toast('Badge retiré'); rendreMembres(); }).catch(function(er){ alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
   }
 });
 function suivreBadgesInconnusRendu(){ var el=$('eqBadges'); if(el) el.innerHTML='<p class="note" style="margin:0">Mise à jour…</p>'; suivreBadgesInconnus(); }
@@ -1379,7 +1412,7 @@ function rendreMembres(quotas){
   $('eqMembres').innerHTML=(EQ.membres.length?EQ.membres.map(function(m,i){
     var q='';
     if(m.role==='etudiant'){ var u=(m.soldeDepart||0)*60+(quotas[m.id]||0); q=' · <b class="num" style="color:'+(u>600*60?'var(--danger)':u>500*60?'var(--warn)':'var(--ink)')+'">'+Math.round(u/60)+' h utilisées sur 650</b>'; }
-    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':'')+q+'</span></span><button class="btn small sec" data-editm="'+i+'">Modifier</button></div>';
+    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':'')+q+'</span>'+ligneBadge(m)+'</span><span class="inline">'+(m.actif!==false&&badgeDe(m.id)?'<button class="btn small sec" data-badgex="'+esc(m.id)+'">Retirer le badge</button>':'')+'<button class="btn small sec" data-editm="'+i+'">Modifier</button></span></div>';
   }).join(''):'<div class="empty">Aucune personne pour l’instant.</div>');
 }
 function editerMembre(i){
@@ -1402,7 +1435,7 @@ function editerMembre(i){
     if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
     var pub=EQ.membres.map(function(x){ return {id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; });
     var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||''}; });
-    Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
+    Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; synchroBadgesCaisse().catch(function(){}); rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
   };
   f.scrollIntoView({behavior:'smooth'});
 }
@@ -3340,7 +3373,7 @@ $('regSave').onclick=function(){
   if(err.length){ alert('À corriger :\n• '+err.join('\n• ')); return; }
   reg.maj=Date.now();
   $('regSave').disabled=true;
-  db.collection('config').doc('caisse').get().then(function(sb){ if(sb.exists&&sb.data().badges) reg.badges=sb.data().badges; return db.collection('config').doc('caisse').set(reg); }).then(function(){ REGC.fondCaisse=reg.fondCaisse; REGC.seuilEcart=reg.seuilEcart; REGC.seuilDeux=reg.seuilDeux; REGC.tvaVentes=reg.tvaVentes; majCloture(); toast('Réglages envoyés à la caisse'); $('regEtat').textContent='Enregistrés à l’instant'; })
+  db.collection('config').doc('caisse').get().then(function(sb){ if(sb.exists){ var ob=sb.data(); ['badges','badgesRetires','equipe'].forEach(function(k){ if(ob[k]!==undefined) reg[k]=ob[k]; }); } return db.collection('config').doc('caisse').set(reg); }).then(function(){ REGC.fondCaisse=reg.fondCaisse; REGC.seuilEcart=reg.seuilEcart; REGC.seuilDeux=reg.seuilDeux; REGC.tvaVentes=reg.tvaVentes; majCloture(); toast('Réglages envoyés à la caisse'); $('regEtat').textContent='Enregistrés à l’instant'; })
     .catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); }).then(function(){ $('regSave').disabled=false; });
 };
 
