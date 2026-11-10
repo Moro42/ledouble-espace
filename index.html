@@ -1127,9 +1127,35 @@ document.addEventListener('click',function(e){
     .catch(function(er){ $('apEtat').textContent='Enregistrement impossible ('+(er.code||er.message)+')'; })
     .then(function(){ b.disabled=false; });
 });
+/* comptage du comptoir le soir : cellules « compté » et « écart » (compté − prévu), en pièces et en euros */
+var ECART_GROS={q:3,c:300};   // gros écart : 3 pièces ou 3 €
+function ecartSoirGros(e,pid){ var pr=prixAchat(pid); return Math.abs(e)>=ECART_GROS.q-0.001||(pr!=null&&Math.abs(e*pr)>=ECART_GROS.c); }
+function cellulesSoir(d,pid,p,j,fr){
+  var rc=d.resteCompte||{}, compte=Object.keys(rc).length>0;
+  if(pid===fr) return rc[fr]!=null?'<td class="num"><b>'+esc(qCond(rc[fr],p))+'</b></td><td class="num"><span class="note">sert à calculer l’utilisé</span></td>':'<td class="num" colspan="2"><span class="note">'+(compte?'non compté':j===jour()?'en attente de la clôture':'pas compté')+'</span></td>';
+  if(!d.compteSoir||d.compteSoir[pid]==null) return '<td class="num" colspan="2"><span class="note">'+(compte?'non compté':j===jour()?'en attente de la clôture':'pas compté')+'</span></td>';
+  var e=d.ecartSoir[pid]||0, pr=prixAchat(pid), n=String(Math.round(Math.abs(e)*10)/10).replace('.',','), gros=ecartSoirGros(e,pid), t;
+  if(Math.abs(e)<0.05) t='<span style="color:var(--ok);font-weight:700">0 ✓</span>';
+  else t='<span style="font-weight:700;color:'+(!gros?'var(--ink)':e<0?'var(--danger)':'var(--warn)')+'">'+(e<0?'−':'+')+n+(pr!=null?' · '+(e<0?'':'+')+eur(e*pr):'')+'</span>'+(e>0&&gros?' <span class="note">sortie non notée ?</span>':'');
+  return '<td class="num"><b>'+esc(qCond(Math.round(d.compteSoir[pid]*100)/100,p))+'</b></td><td class="num">'+t+'</td>';
+}
 /* ---------- SORTIES DU JOUR EN DIRECT (onglet Aujourd'hui) ---------- */
 // reporté d'hier · sorti · consommé · jeté · au comptoir ; recalculé à chaque vente et à chaque mouvement de la tablette
-var SD={mvtsJour:[],unsub:null,jour:null,t:null};
+var SD={mvtsJour:[],unsub:null,jour:null,t:null,at:[],sigAT:null};
+/* gros écarts du comptage du soir (7 derniers jours) et comptoir pas compté le dernier jour ouvert, pour « À traiter » */
+function ecartsSoirAT(C){
+  var it=[], j0=jour(new Date(Date.now()-7*864e5)), auj=jour(), hier=jour(new Date(Date.now()-864e5));
+  var jrs=Object.keys(C.jours).sort(), utilise=jrs.some(function(j){ return Object.keys(C.jours[j].compteSoir||{}).length; });
+  jrs.forEach(function(j){ if(j<j0) return; var d=C.jours[j], g=[], danger=false;
+    Object.keys(d.compteSoir||{}).forEach(function(pid){ var e=d.ecartSoir[pid]||0; if(!ecartSoirGros(e,pid)) return; var p=prodP(pid)||{nom:'?'}, pr=prixAchat(pid), n=String(Math.round(Math.abs(e)*10)/10).replace('.',',');
+      if(e<0) danger=true;
+      g.push(esc(p.nom)+' : prévu '+esc(String(Math.round(d.prevuSoir[pid]*10)/10).replace('.',','))+', compté '+esc(String(Math.round(d.compteSoir[pid]*10)/10).replace('.',','))+' ('+(e<0?'−':'+')+n+(pr!=null?' · '+(e<0?'':'+')+eur(e*pr):'')+(e>0?', sortie non notée ?':'')+')'); });
+    if(g.length) it.push({n:g.length,grave:danger?1:0,txt:'Gros écart au comptoir '+(j===auj?'ce soir':j===hier?'hier soir':'le '+j.slice(8,10)+'/'+j.slice(5,7)+' au soir'),sous:g.join(' · '),v:'stock',cible:'skSorties@'+j}); });
+  // dernier jour ouvert avant aujourd'hui : comptoir pas compté
+  if(utilise){ var der=jrs.filter(function(j){ return j<auj&&C.jours[j].ca>0; }).pop();
+    if(der&&der>=j0&&!Object.keys(C.jours[der].resteCompte||{}).length) it.push({n:'!',txt:'Comptoir pas compté à la clôture du '+der.slice(8,10)+'/'+der.slice(5,7),sous:'Le chiffre prévu est passé au lendemain sans vérification',v:'stock',cible:'skSorties@'+der}); }
+  return it;
+}
 function suivreSortiesJour(){
   var j=jour(); if(SD.unsub&&SD.jour===j) return; if(SD.unsub) SD.unsub(); SD.jour=j;
   SD.unsub=db.collection('stock_mvts').where('jour','==',j).onSnapshot(function(s){ SD.mvtsJour=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }); majSortiesDirect(); },function(){});
@@ -1150,12 +1176,15 @@ function rendreSortiesDirect(){
     var ordre=(SC.produits||[]).map(function(p){ return p.id; });
     var l=Object.keys(ids).sort(function(a,b){ if(a===bag) return -1; if(b===bag) return 1; return ordre.indexOf(a)-ordre.indexOf(b); });
     function q(v,p){ return v?esc(qCond(Math.round(v*10)/10,p)):'<span class="note">—</span>'; }
-    var lignes=l.map(function(pid){ var p=prodP(pid)||{nom:'?',unite:''}, suivi=C.suivi[pid]!=null, cf=d.comptoirFin[pid]||0, estim=pid===fr&&!(d.consoReelle&&d.consoReelle[pid]);
-      if(estim&&suivi){ cf=Math.max(0,cf); } if(estim&&suivi) return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+q(d.debut[pid],p)+'</td><td class="num">'+q(d.sorti[pid],p)+'</td><td class="num"><span class="note">≈</span> '+q(d.conso[pid],p)+'</td><td class="num">'+q(d.perdu[pid],p)+'</td><td class="num"><b><span class="note">≈</span> '+q(cf,p)+'</b> <span class="note">compté à la clôture</span></td></tr>';
-      var fin=!suivi?'<span class="note">non suivi</span>':cf<-0.01?'<span style="color:var(--danger)">'+esc(qFmt(Math.round(cf*10)/10,p.unite))+'</span> <span class="note">sortie non notée ?</span>':q(cf,p)+(pid===bag&&cf>0.05?' <span class="tag tir">jetées ce soir</span>':'');
-      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+(pid===bag?'<span class="note">0</span>':q(d.debut[pid],p))+'</td><td class="num">'+q(d.sorti[pid],p)+'</td><td class="num">'+q(d.conso[pid],p)+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+q(d.perdu[pid],p)+'</td><td class="num"><b>'+fin+'</b></td></tr>'; }).join('');
-    el.innerHTML=lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Reporté d’hier</th><th>Sorti aujourd’hui</th><th>Consommé</th><th>Jeté</th><th>Au comptoir</th></tr>'+lignes+'</table></div><p class="note" style="margin:8px 0 0">Ce qui reste au comptoir passe au lendemain. Exception : les baguettes non vendues sont comptées en perte d’office à la fin de la journée.</p>':'<div class="empty">Aucune sortie ni vente aujourd’hui pour l’instant.</div>';
+    d.resteCompte=d.resteCompte||{}; d.compteSoir=d.compteSoir||{}; d.prevuSoir=d.prevuSoir||{}; d.ecartSoir=d.ecartSoir||{};
+    var lignes=l.map(function(pid){ var p=prodP(pid)||{nom:'?',unite:''}, suivi=C.suivi[pid]!=null, cf=d.prevuSoir[pid]!=null?d.prevuSoir[pid]:(d.comptoirFin[pid]||0), estim=pid===fr&&!(d.consoReelle&&d.consoReelle[pid]), soir=suivi?cellulesSoir(d,pid,p,j,fr):'<td colspan="2"></td>';
+      if(estim&&suivi){ cf=Math.max(0,cf); } if(estim&&suivi) return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+q(d.debut[pid],p)+'</td><td class="num">'+q(d.sorti[pid],p)+'</td><td class="num"><span class="note">≈</span> '+q(d.conso[pid],p)+'</td><td class="num">'+q(d.perdu[pid],p)+'</td><td class="num"><b><span class="note">≈</span> '+q(cf,p)+'</b> <span class="note">compté à la clôture</span></td>'+soir+'</tr>';
+      var jet=d.compteSoir[pid]!=null?d.compteSoir[pid]:cf;
+      var fin=!suivi?'<span class="note">non suivi</span>':cf<-0.01?'<span style="color:var(--danger)">'+esc(qFmt(Math.round(cf*10)/10,p.unite))+'</span> <span class="note">sortie non notée ?</span>':q(cf,p)+(pid===bag&&jet>0.05?' <span class="tag tir">jetées ce soir</span>':'');
+      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+(pid===bag?'<span class="note">0</span>':q(d.debut[pid],p))+'</td><td class="num">'+q(d.sorti[pid],p)+'</td><td class="num">'+q(d.conso[pid],p)+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+q(d.perdu[pid],p)+'</td><td class="num"><b>'+fin+'</b></td>'+soir+'</tr>'; }).join('');
+    el.innerHTML=lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Reporté d’hier</th><th>Sorti aujourd’hui</th><th>Consommé</th><th>Jeté</th><th>Au comptoir <span style="font-weight:400">(prévu)</span></th><th>Compté ce soir</th><th>Écart</th></tr>'+lignes+'</table></div><p class="note" style="margin:8px 0 0">Ce qui reste au comptoir passe au lendemain. Exception : les baguettes non vendues sont comptées en perte d’office à la fin de la journée. Une fois le comptoir compté par le gérant à la clôture, c’est le chiffre <b>compté</b> qui passe au lendemain. Écart = compté − prévu (négatif : il en manque ; positif : il en reste plus que prévu).</p>':'<div class="empty">Aucune sortie ni vente aujourd’hui pour l’instant.</div>';
     majPertesAuto(C);
+    var at=ecartsSoirAT(C), sig=JSON.stringify(at); SD.at=at; if(sig!==SD.sigAT){ SD.sigAT=sig; majATraiter(); }
   }).catch(function(e){ el.innerHTML='<div class="err">Calcul impossible ('+(e.code||e.message)+')</div>'; });
 }
 /* ---------- À TRAITER : tout ce qui attend une action, au même endroit ---------- */
@@ -1200,6 +1229,7 @@ function rendreATraiter(){
     if(nP) it.push({n:nP,txt:'Proposition'+(nP>1?'s':'')+' du gérant pour le planning',v:'equipe',cible:'eqProps'});
     // stock
     if(PASTILLES['outil-stock']) it.push({n:PASTILLES['outil-stock'],txt:'Produits sous le seuil d’alerte',v:'stock',cible:'skEtat'});
+    (SD.at||[]).forEach(function(x){ it.push(x); });
     if(SMV&&SMV.length&&!SMV.some(function(m){return m.type==='inventaire'})) it.push({n:'!',txt:'Premier inventaire pas encore fait',sous:'Le stock reste approximatif tant que la réserve et le comptoir n’ont pas été comptés une première fois (sur la tablette du gérant)',v:'stock',cible:'skEtat'});
     var el=$('dATraiter'); if(!el) return;
     // une ligne ignorée revient d'elle-même si son contenu change (nouveau doublon, autre montant…)
@@ -1216,7 +1246,8 @@ function rendreATraiter(){
 }
 var AT_IGN={}, AT_CLES=[];
 function cleAT(t){ var h=5381; for(var i=0;i<t.length;i++) h=((h<<5)+h+t.charCodeAt(i))|0; return 'k'+(h>>>0).toString(36); }
-document.addEventListener('click',function(e){ var b=e.target.closest('[data-at]'); if(!b) return; var p=b.getAttribute('data-at').split('|'); allerA(p[0],p[1]); });
+document.addEventListener('click',function(e){ var b=e.target.closest('[data-at]'); if(!b) return; var p=b.getAttribute('data-at').split('|'), c=String(p[1]||'').split('@');
+  if(c[1]){ allerA(p[0],c[0]); setTimeout(function(){ var dj=$('skSortJour'); if(dj){ dj.value=c[1]; rendreSortiesJour(); } },300); return; } allerA(p[0],p[1]); });
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-atign],#atReaff'); if(!b) return; e.preventDefault();
   if(b.id==='atReaff'){ AT_IGN={}; rendreATraiter(); db.collection('config').doc('ignores').set({ign:{},maj:Date.now()}).catch(function(er){ toast('Enregistrement impossible ('+er.code+')'); }); return; }
@@ -1656,7 +1687,7 @@ function rendreStockP(){
 var PERTES_AUTO={sem:0,mois:0};
 // baguettes non vendues le soir (perte d'office), valorisées au prix d'achat
 function majPertesAuto(C){ var sem=jour(lundiP()), m0=jour().slice(0,8)+'01', s2=0, m2=0;
-  Object.keys(C.jours).forEach(function(j){ var pa=C.jours[j].perteAuto||{}; Object.keys(pa).forEach(function(pid){ var v=(prixAchat(pid)||0)*pa[pid]; if(j>=sem) s2+=v; if(j>=m0) m2+=v; }); });
+  Object.keys(C.jours).forEach(function(j){ [C.jours[j].perteAuto||{},C.jours[j].manqueSoir||{}].forEach(function(pa){ Object.keys(pa).forEach(function(pid){ var v=(prixAchat(pid)||0)*pa[pid]; if(j>=sem) s2+=v; if(j>=m0) m2+=v; }); }); });
   var ch=Math.round(s2)!==Math.round(PERTES_AUTO.sem)||Math.round(m2)!==Math.round(PERTES_AUTO.mois); PERTES_AUTO={sem:s2,mois:m2}; if(ch&&$('skPertes')&&SMV) rendreMvts(); }
 function rendreMvts(){
   var debutSem=jour(lundiP()), pertesSem=0, pertesMois=0, detail={}, m0=jour(new Date()).slice(0,8)+'01';
@@ -1792,8 +1823,8 @@ function chronologieStock(evs,mvts,R,ratios){
   var suivi={};   // produit → instant où son suivi au comptoir commence
   // le suivi commence au début du jour de la première sortie (même si elle est notée le soir) : les ventes de ce jour-là comptent
   items.forEach(function(it){ if(it.t==='consommation'||it.t==='inventaire') (it.m.lignes||[]).forEach(function(l){ if(suivi[l.produit]==null) suivi[l.produit]=new Date(it.jour+'T00:00:00').getTime(); }); });
-  var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{}}, jourCourant=null;
-  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},manque:{},ca:0,comptoirFin:{},debut:{},perteAuto:{},resteCompte:{},sansReste:{},consoReelle:{},estCpt:{}}; }
+  var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{},soir:{}}, jourCourant=null;
+  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},manque:{},ca:0,comptoirFin:{},debut:{},perteAuto:{},resteCompte:{},sansReste:{},consoReelle:{},estCpt:{},prevuSoir:{},compteSoir:{},ecartSoir:{},manqueSoir:{}}; }
   // frites : on ne connaît pas les grammes par sandwich ; ce qui est utilisé = reporté + sorti − jeté − sacs restants comptés le soir
   // (si le reste du soir n'est pas noté, tout ce qui a été sorti compte comme utilisé)
   var fr=produitRegle('frites',R);
@@ -1805,6 +1836,12 @@ function chronologieStock(evs,mvts,R,ratios){
       if(noteR||j<jour()){ var reste=noteR?d.resteCompte[fr]:0, est=d.conso[fr]||0, reel=Math.max(0,(comptoir[fr]||0)+(d.estCpt[fr]||0)-reste);
         if(!noteR&&(comptoir[fr]||0)+(d.estCpt[fr]||0)>0.01) d.sansReste[fr]=true;
         d.conso[fr]=reel; d.consoReelle[fr]=true; per.conso[fr]=(per.conso[fr]||0)-est+reel; comptoir[fr]=reste; } }
+    /* comptage du comptoir le soir par le gérant : prévu · compté · écart ; le compté passe au lendemain (baguettes : perte d'office du compté)
+       il en manque (compté < prévu) → manque du soir (perte non expliquée) ; il en reste plus → sortie non notée, reprise de la réserve */
+    Object.keys(d.resteCompte).forEach(function(pid){ if(pid===fr||suivi[pid]==null) return; var prevu=comptoir[pid]||0, cpt=d.resteCompte[pid];
+      d.prevuSoir[pid]=prevu; d.compteSoir[pid]=cpt; d.ecartSoir[pid]=cpt-prevu;
+      if(cpt<prevu-0.001){ d.manqueSoir[pid]=prevu-cpt; per.soir[pid]=(per.soir[pid]||0)+prevu-cpt; } else if(cpt>prevu+0.001) reserve[pid]=(reserve[pid]||0)-(cpt-prevu);
+      comptoir[pid]=cpt; });
     if(bag&&j<jour()&&comptoir[bag]>0.01){ var q=comptoir[bag]; d.perteAuto[bag]=q; d.perdu[bag]=(d.perdu[bag]||0)+q; per.decl[bag]=(per.decl[bag]||0)+q; comptoir[bag]=0; }
     Object.keys(comptoir).forEach(function(pid){ d.comptoirFin[pid]=comptoir[pid]; if(comptoir[pid]<-0.01){ d.manque[pid]=-comptoir[pid]; reserve[pid]=(reserve[pid]||0)+comptoir[pid]; comptoir[pid]=0; } }); }
   items.forEach(function(it){
@@ -1818,12 +1855,12 @@ function chronologieStock(evs,mvts,R,ratios){
       if(it.t==='reste_soir') d.resteCompte[pid]=l.qte;
     });
     if(it.t==='inventaire'){
-      var b={jour:it.jour,h:it.m.h||'',debut:per.debut,ca:per.ca,conso:per.conso,decl:per.decl,lignes:[]};
+      var b={jour:it.jour,h:it.m.h||'',debut:per.debut,ca:per.ca,conso:per.conso,decl:per.decl,soir:per.soir,lignes:[]};
       (it.m.lignes||[]).forEach(function(l){ var pid=l.produit, cR=l.qte!=null?l.qte:null, cC=l.comptoir!=null?l.comptoir:null;
         var theo=(cR!=null?(reserve[pid]||0):0)+(cC!=null?(comptoir[pid]||0):0), compte=(cR!=null?cR:0)+(cC!=null?cC:0);
         if(dejaInv[pid]&&(cR!=null||cC!=null)) b.lignes.push({pid:pid,theo:theo,compte:compte,ecart:theo-compte});
         dejaInv[pid]=1; if(cR!=null) reserve[pid]=cR; if(cC!=null) comptoir[pid]=cC; });
-      bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{}};
+      bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{},soir:{}};
     }
   });
   cloreJour(jourCourant);
@@ -1841,12 +1878,13 @@ function rendreSortiesJour(){
     enregistrerAppris(ratios);
     var C=chronologieStock(evs,mvts,R,ratios), d=C.jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}}; majPertesAuto(C);
     var ids={}; Object.keys(d.sorti).concat(Object.keys(d.conso),Object.keys(d.perdu),Object.keys(d.comptoirFin)).forEach(function(k){ ids[k]=1; });
-    var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.comptoirFin[pid]||0, suivi=C.suivi[pid]!=null&&C.suivi[pid]<=new Date(j+'T23:59:59').getTime(), mq=d.manque[pid]||0;
-      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p))+(d.perteAuto&&d.perteAuto[pid]?' <span class="note">(dont '+esc(qFmt(d.perteAuto[pid],''))+' d’office, non vendues le soir)</span>':''):'—')+'</td><td class="num">'+(!suivi?'<span class="note">non suivi (aucune sortie notée)</span>':mq>0.01?'0 <span style="color:var(--warn);font-weight:700">· il manque '+esc(qCond(Math.round(mq*100)/100,p))+'</span> <span class="note">(sortie non notée ?)</span>':esc(qCond(Math.round(Math.max(0,cf)*100)/100,p)))+'</td></tr>'; }).join('');
+    var frS=produitRegle('frites',R); d.resteCompte=d.resteCompte||{}; d.compteSoir=d.compteSoir||{}; d.prevuSoir=d.prevuSoir||{}; d.ecartSoir=d.ecartSoir||{}; d.manque=d.manque||{};
+    var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.prevuSoir[pid]!=null?d.prevuSoir[pid]:(d.comptoirFin[pid]||0), suivi=C.suivi[pid]!=null&&C.suivi[pid]<=new Date(j+'T23:59:59').getTime(), mq=d.prevuSoir[pid]!=null?0:(d.manque[pid]||0);
+      return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p))+(d.perteAuto&&d.perteAuto[pid]?' <span class="note">(dont '+esc(qFmt(d.perteAuto[pid],''))+' d’office, non vendues le soir)</span>':''):'—')+'</td><td class="num">'+(!suivi?'<span class="note">non suivi (aucune sortie notée)</span>':mq>0.01?'0 <span style="color:var(--warn);font-weight:700">· il manque '+esc(qCond(Math.round(mq*100)/100,p))+'</span> <span class="note">(sortie non notée ?)</span>':d.prevuSoir[pid]!=null&&cf<-0.01?'<span style="color:var(--danger)">'+esc(qFmt(Math.round(cf*10)/10,p.unite))+'</span>':esc(qCond(Math.round(Math.max(0,cf)*100)/100,p)))+'</td>'+(suivi?cellulesSoir(d,pid,p,j,frS):'<td colspan="2"></td>')+'</tr>'; }).join('');
     var vc=valeurConso(d.conso), caHT=d.ca/(1+(REGC.tvaVentes||6)/100);
-    var frx=produitRegle('frites',R); if(frx&&d.sansReste&&d.sansReste[frx]) lignes+='<tr><td colspan="5" class="note">Frites : reste du soir pas noté, tout ce qui a été sorti compte comme utilisé.</td></tr>';
-    el.innerHTML=(lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Sorti de la réserve</th><th>Consommé par les ventes</th><th>Jeté (pertes déclarées)</th><th>Au comptoir en fin de journée</th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune sortie ni vente ce jour-là.</div>')+
-      '<p class="note">Ce qui est sorti et pas encore vendu reste au comptoir et passe au lendemain : ce n’est pas une perte. Ce qui n’est pas réutilisable est déclaré en perte par le gérant et sort du comptoir. Les écarts non expliqués apparaissent à l’inventaire.'+(caHT>0&&vc.v?' Food cost théorique du jour : <b>'+Math.round(vc.v*100/caHT)+' %</b> ('+eur(vc.v)+' de matière pour '+eur(caHT)+' de CA HT'+(vc.manque?', certains prix manquent':'')+').':'')+'</p>';
+    var frx=produitRegle('frites',R); if(frx&&d.sansReste&&d.sansReste[frx]) lignes+='<tr><td colspan="7" class="note">Frites : reste du soir pas noté, tout ce qui a été sorti compte comme utilisé.</td></tr>';
+    el.innerHTML=(lignes?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Sorti de la réserve</th><th>Consommé par les ventes</th><th>Jeté (pertes déclarées)</th><th>Au comptoir en fin de journée <span style="font-weight:400">(prévu)</span></th><th>Compté</th><th>Écart</th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune sortie ni vente ce jour-là.</div>')+
+      '<p class="note">Ce qui est sorti et pas encore vendu reste au comptoir et passe au lendemain : ce n’est pas une perte. Ce qui n’est pas réutilisable est déclaré en perte par le gérant et sort du comptoir. Les écarts non expliqués apparaissent à l’inventaire.'+(function(){ var v=valeurConso(d.manqueSoir||{}).v; return v>=1?' Manques au comptage du soir : <b style="color:var(--danger)">'+eur(v)+'</b> (comptés dans les pertes de la semaine).':''; })()+(caHT>0&&vc.v?' Food cost théorique du jour : <b>'+Math.round(vc.v*100/caHT)+' %</b> ('+eur(vc.v)+' de matière pour '+eur(caHT)+' de CA HT'+(vc.manque?', certains prix manquent':'')+').':'')+'</p>';
     rendreBilans(C);
   }).catch(function(e){ el.innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
 }
@@ -1856,9 +1894,9 @@ function rendreBilans(C){
   el.innerHTML=b.length?b.slice(0,8).map(function(x){
     var vp=0, lignes=x.lignes.map(function(l){ var p=prodP(l.pid)||{nom:'?'}, pr=prixAchat(l.pid), v=pr!=null?l.ecart*pr:null; if(v!=null) vp+=v;
       return '<div class="row"><span class="l">'+esc(p.nom)+' <span class="note">attendu '+esc(qCond(Math.round(l.theo*100)/100,p))+' · compté '+esc(qCond(l.compte,p))+'</span></span><b class="num" style="color:'+(l.ecart>0.01?'var(--danger)':'var(--ok)')+'">'+(l.ecart>0.01?'−':l.ecart<-0.01?'+':'')+esc(qCond(Math.round(Math.abs(l.ecart)*100)/100,p))+(v!=null&&Math.abs(v)>=1?' · '+eur(Math.abs(v)):'')+'</b></div>'; }).join('');
-    var caHT=x.ca/(1+(REGC.tvaVentes||6)/100), vt=valeurConso(x.conso).v, vd=valeurConso(x.decl||{}).v, fcT=caHT?vt*100/caHT:null, fcR=caHT?(vt+vd+Math.max(0,vp))*100/caHT:null;
+    var caHT=x.ca/(1+(REGC.tvaVentes||6)/100), vt=valeurConso(x.conso).v, vd=valeurConso(x.decl||{}).v, vs=valeurConso(x.soir||{}).v, fcT=caHT?vt*100/caHT:null, fcR=caHT?(vt+vd+vs+Math.max(0,vp))*100/caHT:null;
     return '<div class="card" style="margin-bottom:10px"><b>Inventaire du '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' '+esc(x.h)+'</b> <span class="note">· période depuis le '+esc(String(x.debut||'').slice(8,10)+'/'+String(x.debut||'').slice(5,7))+'</span>'+lignes+
-      '<p class="note" style="margin:8px 0 0">Pertes déclarées par le gérant : <b>'+eur(vd)+'</b> · écart non expliqué à l’inventaire : <b style="color:'+(vp>0?'var(--danger)':'var(--ok)')+'">'+eur(Math.max(0,vp))+'</b>'+(caHT?' · total '+((vd+Math.max(0,vp))*100/caHT).toFixed(1).replace('.',',')+' % du CA HT':'')+(fcT!=null?' · food cost théorique <b>'+Math.round(fcT)+' %</b> · réel <b>'+Math.round(fcR)+' %</b>':'')+'</p></div>'; }).join('')
+      '<p class="note" style="margin:8px 0 0">Pertes déclarées par le gérant : <b>'+eur(vd)+'</b>'+(vs>=1?' · manques au comptage du soir : <b style="color:var(--danger)">'+eur(vs)+'</b>':'')+' · écart non expliqué à l’inventaire : <b style="color:'+(vp>0?'var(--danger)':'var(--ok)')+'">'+eur(Math.max(0,vp))+'</b>'+(caHT?' · total '+((vd+vs+Math.max(0,vp))*100/caHT).toFixed(1).replace('.',',')+' % du CA HT':'')+(fcT!=null?' · food cost théorique <b>'+Math.round(fcT)+' %</b> · réel <b>'+Math.round(fcR)+' %</b>':'')+'</p></div>'; }).join('')
     :'<div class="empty">Pas encore de bilan : il faut au moins deux inventaires (le premier sert de point de départ). Demande au gérant de compter la réserve et le comptoir.</div>';
 }
 /* ---------- food cost du jour, en direct ---------- */

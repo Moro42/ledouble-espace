@@ -210,49 +210,64 @@ function ouvertureAffiche(){
 function rappelSortiesPuisCloture(){
   chargerStock(function(){
     var nb=mvtsActifs().filter(function(m){ return m.type==='consommation'&&m.jour===jour(); }).length;
-    if(nb){ etapeFrites(function(){ comptage('cloture'); }); return; }
+    if(nb){ etapeComptoir(function(){ comptage('cloture'); }); return; }
     ouvrirModal('<div style="text-align:center;font-size:34px">📋</div><h2 style="font-size:22px;text-align:center">Avant de compter le tiroir</h2><p class="sub" style="margin:0;text-align:center">Les sorties du jour ne sont pas encore indiquées.</p><button class="btn dark" id="rsOui">Indiquer les sorties maintenant</button><button class="btn sec" id="rsNon">Plus tard, compter le tiroir</button>');
     $('rsOui').onclick=function(){ fermerModal(); vueSorties(); };
-    $('rsNon').onclick=function(){ fermerModal(); etapeFrites(function(){ comptage('cloture'); }); };
+    $('rsNon').onclick=function(){ fermerModal(); etapeComptoir(function(){ comptage('cloture'); }); };
   });
 }
-/* ---------- frites restantes au comptoir (début de la clôture) ---------- */
-// utilisé du jour = reporté + sorti − jeté − sacs restants ; les sacs restants servent le lendemain
+/* ---------- ce qui reste au comptoir (début de la clôture, comptage à l'aveugle) ---------- */
+// le gérant compte les pièces restantes de chaque produit suivi (aucun chiffre prévu ni prix affiché) ;
+// un seul mouvement reste_soir avec une ligne par produit compté ; le compté passe au lendemain (baguettes : perte d'office)
+// frites : utilisé du jour = reporté + sorti − jeté − sacs restants
 function produitFrites(){
   var m=STOCKCFG.regles&&STOCKCFG.regles.map&&STOCKCFG.regles.map.frites, r=null;
   (STOCKCFG.produits||[]).forEach(function(p){ if(r||p.actif===false) return; if(m?p.id===m:(p.id==='frites'||/frite/i.test(p.nom||''))) r=p; });
   return r;
 }
-function etapeFrites(suite){
-  var p=produitFrites(); if(!p){ suite(); return; }
-  var act=mvtsActifs(), j=jour(), sortis=0, hier=null;
-  if(act.some(function(m){ return m.type==='reste_soir'&&m.jour===j; })){ suite(); return; }   // déjà compté ce soir
-  act.forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(l.produit!==p.id) return;
-    if(m.type==='consommation'&&m.jour===j) sortis+=l.qte;
-    if(m.type==='reste_soir'&&m.jour<j&&(!hier||m.tsClient>hier.tsClient)) hier={tsClient:m.tsClient,qte:l.qte}; }); });
-  var rep=hier?hier.qte:0;
-  if(!sortis&&!rep){ suite(); return; }   // rien à compter
-  var c=condDe(p)||{nom:'sac',contenu:2.5}, n=0;
-  function sacs(q){ return nb(q/c.contenu)+' '+pluriel(c.nom,q/c.contenu); }
-  ouvrirModal('<p class="sub" style="margin:0;text-align:center">Clôture du soir · étape 1 sur 2</p><h2 style="font-size:22px;text-align:center">Frites restantes au comptoir</h2>'+
-    '<p class="sub" style="margin:0;text-align:center">Compte les '+esc(pluriel(c.nom,2))+' de '+nb(c.contenu)+' '+esc(p.unite||'kg')+' qui ne sont pas utilisés ce soir. Ils serviront demain.</p>'+
-    '<div class="step" style="max-width:320px;margin:14px auto 4px"><button id="frM" aria-label="Un '+esc(c.nom)+' de moins">−</button><input id="frN" inputmode="numeric" value="0"><button id="frP" aria-label="Un '+esc(c.nom)+' de plus">+</button></div>'+
-    '<p class="sub" id="frKg" style="margin:0;text-align:center"></p>'+
-    '<p class="sub" style="margin:4px 0 0;text-align:center">Sortis aujourd’hui : '+sacs(sortis)+(rep?' · reportés d’hier : '+sacs(rep):'')+'</p>'+
-    '<button class="btn prim" id="frOk">Valider et compter le tiroir</button><button class="btn sec" id="frZero">Il ne reste aucun '+esc(c.nom)+'</button>');
-  function lire(){ var v=parseInt($('frN').value,10); return isNaN(v)||v<0?0:v; }
-  function maj(){ n=lire(); $('frKg').textContent=n+' '+pluriel(c.nom,n)+' · '+nb(n*c.contenu)+' '+(p.unite||'kg'); }
-  $('frM').onclick=function(){ $('frN').value=Math.max(0,lire()-1); maj(); };
-  $('frP').onclick=function(){ $('frN').value=lire()+1; maj(); };
-  $('frN').oninput=maj; maj();
-  function envoyerReste(k){
-    $('frOk').disabled=true; $('frZero').disabled=true;
-    db.collection('stock_mvts').add({type:'reste_soir',lignes:[{produit:p.id,qte:Math.round(k*c.contenu*1000)/1000}],note:'Clôture du soir',jour:j,h:hhmm(),tsClient:Date.now(),par:GERANT})
-      .then(function(){ toast('Frites restantes notées'); }).catch(function(){ toast('Frites restantes non enregistrées : réessaie demain'); })
-      .then(function(){ fermerModal(); suite(); });
+function produitsAuComptoir(){
+  var suivis={}, fr=produitFrites();
+  mvtsActifs().forEach(function(m){ (m.lignes||[]).forEach(function(l){ if(m.type==='consommation'||(m.type==='inventaire'&&l.comptoir!=null)) suivis[l.produit]=1; }); });
+  return (STOCKCFG.produits||[]).filter(function(p){ if(p.actif===false||!suivis[p.id]) return false; if(fr&&p.id===fr.id) return true;
+    return !( /^(kg|g|gr|grammes?|l|litres?|cl)$/i.test(String(p.unite||'').trim()) ); });
+}
+function etapeComptoir(suite){
+  var j=jour(), fr=produitFrites();
+  if(mvtsActifs().some(function(m){ return m.type==='reste_soir'&&m.jour===j; })){ suite(); return; }   // déjà compté ce soir
+  var liste=produitsAuComptoir(); if(!liste.length){ suite(); return; }
+  var cle='brouillon-comptoir-'+j, br=load(cle,{v:{},u:{}}); br.v=br.v||{}; br.u=br.u||{};
+  function bag(p){ return p.id==='baguettes'||/baguette/i.test(p.nom||''); }
+  function enCond(p){ var c=condDe(p); if(!c) return false; if(fr&&p.id===fr.id) return true; return br.u[p.id]==='cond'; }
+  function ligne(p){ var c=condDe(p), seulCond=c&&fr&&p.id===fr.id, uniteTxt=enCond(p)?pluriel(c.nom,2)+' de '+nb(c.contenu)+(seulCond?' '+(p.unite||'kg'):''):(p.unite||'pièces');
+    return '<div class="cline" style="grid-template-columns:1fr 190px;padding:6px 0;border-bottom:1px solid var(--surface2)"><span><b>'+esc(p.nom)+'</b><br>'+
+      (c&&!seulCond?'<span class="chips" style="margin-top:4px"><button class="chip'+(enCond(p)?'':' on')+'" data-cu="'+p.id+'|base" style="padding:4px 10px;font-size:13px">'+esc(p.unite||'pièces')+'</button><button class="chip'+(enCond(p)?' on':'')+'" data-cu="'+p.id+'|cond" style="padding:4px 10px;font-size:13px">'+esc(pluriel(c.nom,2))+' de '+nb(c.contenu)+'</button></span>'
+        :'<span class="sub" style="margin:0;font-size:14px">'+esc(uniteTxt)+(bag(p)?' · jetées ce soir':'')+'</span>')+'</span>'+
+      '<div class="step" style="grid-template-columns:52px 1fr 52px;height:54px"><button data-cm="'+p.id+'" aria-label="Un de moins">−</button><input inputmode="decimal" data-cq="'+p.id+'" value="'+esc(br.v[p.id]!=null?String(br.v[p.id]):'')+'" placeholder="—"><button data-cp="'+p.id+'" aria-label="Un de plus">+</button></div></div>'; }
+  function rendre(){
+    ouvrirModal('<p class="sub" style="margin:0;text-align:center">Clôture du soir · étape 1 sur 2</p><h2 style="font-size:22px;text-align:center">Ce qui reste au comptoir</h2>'+
+      '<p class="sub" style="margin:0;text-align:center">Compte ce qui n’a pas été utilisé ce soir. Ce qui reste servira demain'+(liste.some(bag)?' (sauf les baguettes, jetées ce soir)':'')+'.</p>'+
+      '<div id="cpListe" style="max-height:52vh;overflow-y:auto">'+liste.map(ligne).join('')+'</div>'+
+      '<button class="btn prim" id="cpOk">Valider et compter le tiroir</button><button class="pt-annul" id="cpPasse" style="text-align:center;width:100%">Je ne peux pas compter ce soir</button>');
   }
-  $('frOk').onclick=function(){ envoyerReste(lire()); };
-  $('frZero').onclick=function(){ envoyerReste(0); };
+  function lireTout(){ Array.prototype.forEach.call(document.querySelectorAll('[data-cq]'),function(inp){ var v=String(inp.value).trim().replace(',','.'); br.v[inp.getAttribute('data-cq')]=v===''?null:Math.max(0,parseFloat(v)||0); }); save(cle,br); }
+  rendre();
+  $('modal').onclick=function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    var cu=b.getAttribute('data-cu'), m=b.getAttribute('data-cm'), pl=b.getAttribute('data-cp');
+    if(cu){ lireTout(); var x=cu.split('|'); br.u[x[0]]=x[1]; save(cle,br); var sc=$('cpListe').scrollTop; rendre(); $('cpListe').scrollTop=sc; return; }
+    if(m||pl){ var inp=document.querySelector('[data-cq="'+(m||pl)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(pl?1:-1)); lireTout(); return; }
+    if(b.id==='cpPasse'){ if(!confirm('Le comptoir ne sera pas compté ce soir. Continuer vers le tiroir ?')) return; $('modal').onclick=null; fermerModal(); suite(); return; }
+    if(b.id==='cpOk'){
+      lireTout(); var lignes=[], vides=[];
+      liste.forEach(function(p){ var v=br.v[p.id]; if(v==null){ vides.push(p.nom); return; } var c=condDe(p), q=enCond(p)&&c?v*c.contenu:v; lignes.push({produit:p.id,qte:Math.round(q*1000)/1000}); });
+      if(!lignes.length){ alert('Aucun produit compté. Compte au moins un produit, ou appuie sur « Je ne peux pas compter ce soir ».'); return; }
+      if(vides.length&&!confirm('Pas compté : '+vides.join(', ')+'.\n\nContinuer quand même ?')) return;
+      b.disabled=true; $('cpPasse').disabled=true;
+      db.collection('stock_mvts').add({type:'reste_soir',comptoir:true,lignes:lignes,note:'Clôture du soir · comptage du comptoir',jour:j,h:hhmm(),tsClient:Date.now(),par:GERANT})
+        .then(function(){ try{ localStorage.removeItem(cle); }catch(e){} toast('Comptoir compté'); }).catch(function(){ toast('Comptage du comptoir non enregistré : réessaie demain'); })
+        .then(function(){ $('modal').onclick=null; fermerModal(); suite(); });
+    }
+  };
 }
 /* ---------- comptage (ouverture avec différence, ou clôture) ---------- */
 var COUPURES=[['b50',5000,'50 €'],['b20',2000,'20 €'],['b10',1000,'10 €'],['b5',500,'5 €'],['p2',200,'2 €'],['p1',100,'1 €']];
