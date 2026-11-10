@@ -2909,6 +2909,12 @@ function argentDuMois(o){
   // une sortie de caisse ou une dépense du même jour et du même montant qu'une facture = le même achat : compté une seule fois
   var dejaFacture={}; facts.forEach(function(f){ dejaFacture[String(f.date||f.jour)+'|'+Math.round(n2(f.totalTTC)*100)]=f; });
   function estFacture(j,m){ for(var d=-5;d<=5;d++) if(dejaFacture[j+'|'+(m+d)]) return dejaFacture[j+'|'+(m+d)]; return null; }
+  // argent sorti du tiroir pour payer un ticket : même jour, montant rond, un peu plus que le ticket (monnaie rendue, jusqu'à 10 €)
+  var factPayee={};
+  function ticketPayeCaisse(x){ var c=norm(x.categorie||''); if(/baguette|avance|salaire/.test(c)||x.montant%500) return null; // seulement un montant rond pris pour aller payer
+    var best=null; facts.forEach(function(f){ if(factPayee[f.__id]||String(f.date||f.jour)!==x.jour) return; var t=Math.round(n2(f.totalTTC)*100)||Math.round(n2(f.totalHT)*100), e=x.montant-t;
+      if(t&&e>=0&&e<=1000&&(!best||e<best.e)) best={f:f,e:e}; });
+    if(best) factPayee[best.f.__id]=1; return best; }
   var avancesInfo=[];
   function personnel(src,montant,txt,j,extra){
     var m=membreDuTexte(txt,membres);
@@ -2920,6 +2926,8 @@ function argentDuMois(o){
   o.evs.forEach(function(x){ if(x.type!=='tiroir'||!x.sortie||x.mixte||!x.montant) return;
     var txt=String(x.motif||x.categorie||'').replace(/^Sortie : /,''), f=estFacture(x.jour,x.montant);
     if(f){ N.marchandises.lignes.forEach(function(l){ if(l.id===f.__id) l.payeCaisse=true; }); return; }
+    var pc=ticketPayeCaisse(x);
+    if(pc){ N.marchandises.lignes.forEach(function(l){ if(l.id===pc.f.__id){ l.payeCaisse=true; l.sortiCaisse=x.montant; } }); return; }
     var k=NATURE_SORTIE[norm(x.categorie)]||natureTexte(txt)||'autres';
     if(k==='personnel') personnel('caisse',x.montant,txt,x.jour); else ajoute(k,{src:'caisse',montant:x.montant,txt:txt,jour:x.jour}); });
   // 3. dépenses notées sur le téléphone
@@ -2967,7 +2975,7 @@ function rendreArgent(A,R,caHT,joursV,tva){
   var aRemb=A.dep.filter(function(x){ return x.aRembourser&&!x.rembourse; }).reduce(function(t,x){ return t+x.montant; },0);
   var url=location.href.replace(/[^\/]*([?#].*)?$/,'')+'depense.html';
   h+=(aRemb?'<div class="row"><span class="l">À te rembourser (payé avec ton argent perso)</span><b class="num" style="color:var(--warn)">'+eur(aRemb)+'</b></div>':'')+
-    '<p class="note" style="margin-top:10px">Noter une dépense depuis le téléphone : <a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url)+'</a>. Les achats payés avec l’argent du tiroir sont notés par le gérant à la caisse. Une sortie de caisse ou une dépense du même jour et du même montant qu’une facture n’est comptée qu’une fois.</p>'+
+    '<p class="note" style="margin-top:10px">Noter une dépense depuis le téléphone : <a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(url)+'</a>. Les achats payés avec l’argent du tiroir sont notés par le gérant à la caisse. Une sortie de caisse ou une dépense du même jour et du même montant qu’une facture n’est comptée qu’une fois ; une sortie de caisse ronde (20 €, 50 €, 100 €…) un peu plus haute qu’un ticket du même jour (monnaie rendue, jusqu’à 10 €) est l’argent qui a payé ce ticket. La caisse du jour, elle, garde la sortie telle quelle.</p>'+
     '<div class="inline" style="margin-top:6px"><button class="btn small sec" id="depExport">Exporter les dépenses du mois</button><button class="btn small sec" id="depCats">Modifier les catégories</button></div>';
   $('fiResultat').innerHTML=h;
 }
@@ -2977,9 +2985,9 @@ function lignesArgent(lignes){
   lignes.forEach(function(l){ if(l.src==='depense'){ ordre.push({dep:l}); return; }
     var cle=l.src==='facture'?'f|'+norm(nomCourtF(l.txt.split(' n° ')[0])):l.src==='caisse'?'c|'+l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.src+'|'+l.txt;
     if(!g[cle]){ g[cle]={src:l.src,txt:l.src==='facture'?l.txt.split(' n° ')[0]:l.src==='caisse'?l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.txt,montant:0,n:0,caisse:false}; ordre.push({g:g[cle]}); }
-    g[cle].montant+=l.montant; g[cle].n++; if(l.payeCaisse) g[cle].caisse=true; });
+    g[cle].montant+=l.montant; g[cle].n++; if(l.payeCaisse) g[cle].caisse=true; if(l.sortiCaisse) g[cle].monnaie=(g[cle].monnaie||[]).concat([eur(l.sortiCaisse)+' sortis, '+eur(l.sortiCaisse-l.montant)+' de monnaie']); });
   return ordre.sort(function(a,b){ return (b.g?b.g.montant:b.dep.montant)-(a.g?a.g.montant:a.dep.montant); }).map(function(o){
-    if(o.g) return '<div class="row"><span class="l">'+SRC_TAG[o.g.src]+' '+esc(o.g.txt)+(o.g.n>1?' <span class="note">('+o.g.n+(o.g.src==='facture'?' factures':' fois')+')</span>':'')+(o.g.caisse?' <span class="note">· payé avec la caisse</span>':'')+'</span><b class="num">'+eur(o.g.montant)+'</b></div>';
+    if(o.g) return '<div class="row"><span class="l">'+SRC_TAG[o.g.src]+' '+esc(o.g.txt)+(o.g.n>1?' <span class="note">('+o.g.n+(o.g.src==='facture'?' factures':' fois')+')</span>':'')+(o.g.caisse?' <span class="note">· payé avec la caisse'+(o.g.monnaie?' ('+esc(o.g.monnaie.join(' ; '))+')':'')+'</span>':'')+'</span><b class="num">'+eur(o.g.montant)+'</b></div>';
     var l=o.dep, x=l.dep;
     return '<div class="row"><span class="l">'+SRC_TAG.depense+' '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' · '+esc(l.txt)+' <span class="note">'+esc(x.paiement||'')+'</span>'+(x.aRembourser?(x.rembourse?' <span class="tag carte">remboursé</span>':' <span class="tag tir">à rembourser</span>'):'')+'</span><span class="inline">'+
       (x.photo?'<button class="btn small sec" data-depvoir="'+x.__id+'">Ticket</button>':'')+(x.aRembourser&&!x.rembourse?'<button class="btn small sec" data-deprem="'+x.__id+'">Remboursé</button>':'')+'<button class="btn small danger" data-depsupp="'+x.__id+'">✕</button></span><b class="num">'+eur(x.montant)+'</b></div>';
