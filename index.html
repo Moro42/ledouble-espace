@@ -383,7 +383,7 @@ body.connecte .ass-fab{display:block}
       <div id="faATraiter" style="margin-top:12px"></div>
       <div id="faVerif" class="hidden" style="margin-top:12px"></div>
       <h3>Registre des achats</h3>
-      <div class="inline" style="margin-bottom:10px"><label class="note">Mois <input class="in" type="month" id="faMois" style="width:auto"></label><button class="btn small dark" id="faExport">Exporter pour le comptable</button></div>
+      <div class="inline" style="margin-bottom:10px"><label class="note">Mois <input class="in" type="month" id="faMois" style="width:auto"></label><label class="note">Jour <select class="in" id="faJour" style="width:auto"><option value="">Tout le mois</option></select></label><button class="btn small dark" id="faExport">Exporter pour le comptable</button></div>
       <div class="card" id="faRegistre"><div class="empty">Chargement…</div></div>
       <h3>Prix d’achat des produits</h3>
       <div class="card" id="fiPrix"><div class="empty">Chargement…</div></div>
@@ -2367,11 +2367,17 @@ function rendreRegistre(){
   $('faATraiter').innerHTML=(aVerif.length?'<div class="card" style="margin-bottom:12px"><b>Livraisons photographiées par le gérant, à vérifier ('+aVerif.length+')</b><p class="note" style="margin:2px 0 6px">Déjà ajoutées au stock. Vérifie les montants pour la TVA.</p>'+aVerif.map(function(x){ return '<div class="row"><span class="l">'+esc(x.jour||'')+' '+esc(x.h||'')+' · '+esc(x.fournisseur||'fournisseur ?')+(x.totalTTC?' · '+e2(x.totalTTC):'')+'</span><span class="inline"><button class="btn small dark" data-fverif="'+x.__id+'">Vérifier</button><button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></span></div>'; }).join('')+'</div>':'')+
     (aTraiter.length?'<div class="card"><b>Photos envoyées par le gérant, à analyser ('+aTraiter.length+')</b>'+aTraiter.map(function(x){ return '<div class="row"><span class="l">'+esc(x.jour||'')+' '+esc(x.h||'')+(x.note?' · '+esc(x.note):'')+'</span><span class="inline"><button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button><button class="btn small dark" data-fan="'+x.__id+'">Analyser</button><button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></span></div>'; }).join('')+'</div>':'');
   var liste=FAC.liste.filter(function(x){ return x.statut==='validee' && x.mois===mois; }).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+  // choix du jour : les jours du mois qui ont des achats, avec leur nombre
+  var selJ=$('faJour'), jChoisi=selJ?selJ.value:'', nbJ={};
+  liste.forEach(function(x){ var d=String(x.date||''); nbJ[d]=(nbJ[d]||0)+1; });
+  if(jChoisi&&!nbJ[jChoisi]) jChoisi='';
+  if(selJ) selJ.innerHTML='<option value="">Tout le mois ('+liste.length+')</option>'+Object.keys(nbJ).sort().map(function(d){ return '<option value="'+esc(d)+'"'+(d===jChoisi?' selected':'')+'>'+esc(new Date(d+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'numeric'}))+' ('+nbJ[d]+')</option>'; }).join('');
+  if(jChoisi) liste=liste.filter(function(x){ return String(x.date||'')===jChoisi; });
   var ht=0, tva=0, ttc=0, parTaux={}, hausses=0;
   liste.forEach(function(x){ ht+=n2(x.totalHT); tva+=n2(x.totalTVA); ttc+=n2(x.totalTTC); hausses+=x.hausses||0; (x.tva||[]).forEach(function(t){ parTaux[t.taux]=(parTaux[t.taux]||0)+n2(t.montant); }); });
   var dblIds={}; facturesDoublons().forEach(function(x){ dblIds[x.__id]=1; });
   var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="note">—</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+(x.payeCaisse?' <span class="tag tir" title="Payé avec la sortie de caisse de '+esc(e2(x.payeCaisse.montant/100))+' à '+esc(x.payeCaisse.h||'')+'">payé avec la caisse</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small sec" data-fcaisse="'+x.__id+'" title="Ce ticket a été payé avec de l’argent sorti de la caisse">Caisse</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
-  $('faRegistre').innerHTML=liste.length?'<div class="scroll"><table class="table"><tr><th>Date</th><th>Fournisseur</th><th>N°</th><th>HT</th><th>TVA</th><th>TTC</th><th>Contrôles</th><th></th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune facture enregistrée pour ce mois.</div>';
+  $('faRegistre').innerHTML=liste.length?'<div class="scroll"><table class="table"><tr><th>Date</th><th>Fournisseur</th><th>N°</th><th>HT</th><th>TVA</th><th>TTC</th><th>Contrôles</th><th></th></tr>'+lignes+'<tr style="font-weight:800"><td colspan="3">Total '+(jChoisi?'du '+esc(new Date(jChoisi+'T12:00:00').toLocaleDateString('fr-BE',{day:'numeric',month:'numeric'})):'du mois')+' · '+liste.length+' achat'+(liste.length>1?'s':'')+'</td><td class="num">'+e2(ht)+'</td><td class="num">'+e2(tva)+'</td><td class="num">'+e2(ttc)+'</td><td colspan="2"></td></tr></table></div>':'<div class="empty">Aucune facture enregistrée pour '+(jChoisi?'ce jour':'ce mois')+'.</div>';
   // TVA collectée sur les ventes (estimation au taux réglé) puis TVA à payer
   var taux=(REGC.tvaVentes!=null?REGC.tvaVentes:6), du=mois+'-01', au=mois+'-31';
   if(!$('faTva')) return;
@@ -2399,7 +2405,8 @@ function exporterFactures(){
 }
 document.addEventListener('change',function(e){
   if(e.target&&e.target.id==='faFichier'){ var fs=Array.prototype.slice.call(e.target.files||[]); e.target.value=''; if(fs.length) traiterFichier(fs[0]); }
-  if(e.target&&e.target.id==='faMois') rendreRegistre();
+  if(e.target&&e.target.id==='faMois'){ if($('faJour')) $('faJour').value=''; rendreRegistre(); }
+  if(e.target&&e.target.id==='faJour') rendreRegistre();
 });
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-fvoir],[data-fedit],[data-fan],[data-fsupp],[data-fverif],[data-fcaisse],#faExport'); if(!b) return;
