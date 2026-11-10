@@ -196,7 +196,44 @@ function lireFondAttendu(cb){
   db.collection('etat').doc('fond').get().then(function(s){ var d=s.exists?s.data():null; FOND_ATTENDU=(d&&d.montant!=null&&d.jour<jour())?d.montant:REG.fondCaisse; }).catch(function(){ FOND_ATTENDU=REG.fondCaisse; }).then(cb);
 }
 function ouverture(){
-  lireFondAttendu(function(){ ouvertureAffiche(); });
+  controleViandes(function(){ lireFondAttendu(function(){ ouvertureAffiche(); }); });
+}
+/* contrôle ponctuel demandé par le propriétaire : avant la prochaine ouverture (11 ou 12/11/2026 seulement, une seule fois),
+   compter les viandes déjà au comptoir. Enregistré comme un inventaire du comptoir (la réserve n'est pas comptée). */
+var CONTROLE_VIANDES={jours:['2026-11-11','2026-11-12'], depuis:'2026-11-11'};
+function controleViandes(suite){
+  var j=jour(); if(CONTROLE_VIANDES.jours.indexOf(j)<0){ suite(); return; }
+  chargerStock(function(){
+    if(MVTS.some(function(m){ return m.controleOuverture&&m.jour>=CONTROLE_VIANDES.depuis; })){ suite(); return; }
+    var liste=(STOCKCFG.produits||[]).filter(function(p){ return p.actif!==false&&/hamb|steak|mulky|poulet|pan[ée]|mexican|kebab|nugget|viande|cordon|merguez|saucisse|boulette/i.test((p.nom||'')+' '+p.id); });
+    if(!liste.length){ suite(); return; }
+    var cle='brouillon-viandes-'+j, br=load(cle,{});
+    function rendre(){
+      ouvrirModal('<p class="sub" style="margin:0;text-align:center">Avant l’ouverture · contrôle demandé par Hicham</p><h2 style="font-size:22px;text-align:center">Combien de viandes au comptoir ?</h2>'+
+        '<p class="sub" style="margin:0;text-align:center">Compte les pièces déjà sorties, au comptoir (pas la réserve).</p>'+
+        '<div style="max-height:52vh;overflow-y:auto">'+liste.map(function(p){ return '<div class="cline" style="grid-template-columns:1fr 190px;padding:6px 0;border-bottom:1px solid var(--surface2)"><span><b>'+esc(p.nom)+'</b><br><span class="sub" style="margin:0;font-size:14px">pièces</span></span>'+
+          '<div class="step" style="grid-template-columns:52px 1fr 52px;height:54px"><button data-vm="'+p.id+'">−</button><input inputmode="numeric" data-vq="'+p.id+'" value="'+esc(br[p.id]!=null?String(br[p.id]):'')+'" placeholder="—"><button data-vp="'+p.id+'">+</button></div></div>'; }).join('')+'</div>'+
+        '<button class="btn prim" id="cvOk">Valider et ouvrir la caisse</button><button class="pt-annul" id="cvPasse" style="text-align:center;width:100%">Je ne peux pas compter maintenant</button>');
+    }
+    function lireTout(){ Array.prototype.forEach.call(document.querySelectorAll('[data-vq]'),function(i){ var v=String(i.value).trim().replace(',','.'); br[i.getAttribute('data-vq')]=v===''?null:Math.max(0,parseFloat(v)||0); }); save(cle,br); }
+    rendre();
+    $('modal').onclick=function(ev){
+      var b=ev.target.closest('button'); if(!b) return;
+      var m=b.getAttribute('data-vm'), pl=b.getAttribute('data-vp');
+      if(m||pl){ var inp=document.querySelector('[data-vq="'+(m||pl)+'"]'); var n=parseFloat(String(inp.value).replace(',','.'))||0; inp.value=Math.max(0,n+(pl?1:-1)); lireTout(); return; }
+      if(b.id==='cvPasse'){ $('modal').onclick=null; fermerModal(); suite(); return; }
+      if(b.id==='cvOk'){
+        lireTout(); var lignes=[], vides=[];
+        liste.forEach(function(p){ if(br[p.id]==null) vides.push(p.nom); else lignes.push({produit:p.id,qte:null,comptoir:br[p.id]}); });
+        if(!lignes.length){ alert('Aucune viande comptée. Compte-les, ou appuie sur « Je ne peux pas compter maintenant ».'); return; }
+        if(vides.length&&!confirm('Pas compté : '+vides.join(', ')+'.\n\nContinuer quand même ?')) return;
+        b.disabled=true;
+        var mv={type:'inventaire',controleOuverture:true,lignes:lignes,note:'Contrôle des viandes au comptoir avant l’ouverture',jour:j,h:hhmm(),tsClient:Date.now(),par:GERANT};
+        db.collection('stock_mvts').add(mv).then(function(r){ mv.__id=r.id; MVTS.push(mv); try{ localStorage.removeItem(cle); }catch(e){} toast('Viandes comptées, merci'); })
+          .catch(function(){ toast('Comptage non enregistré : préviens Hicham'); }).then(function(){ $('modal').onclick=null; fermerModal(); suite(); });
+      }
+    };
+  });
 }
 function ouvertureAffiche(){
   var fondA=FOND_ATTENDU!=null?FOND_ATTENDU:REG.fondCaisse;

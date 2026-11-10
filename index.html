@@ -1230,7 +1230,7 @@ function rendreATraiter(){
     // stock
     if(PASTILLES['outil-stock']) it.push({n:PASTILLES['outil-stock'],txt:'Produits sous le seuil d’alerte',v:'stock',cible:'skEtat'});
     (SD.at||[]).forEach(function(x){ it.push(x); });
-    if(SMV&&SMV.length&&!SMV.some(function(m){return m.type==='inventaire'})) it.push({n:'!',txt:'Premier inventaire pas encore fait',sous:'Le stock reste approximatif tant que la réserve et le comptoir n’ont pas été comptés une première fois (sur la tablette du gérant)',v:'stock',cible:'skEtat'});
+    if(SMV&&SMV.length&&!SMV.some(function(m){return m.type==='inventaire'&&!m.controleOuverture})) it.push({n:'!',txt:'Premier inventaire pas encore fait',sous:'Le stock reste approximatif tant que la réserve et le comptoir n’ont pas été comptés une première fois (sur la tablette du gérant)',v:'stock',cible:'skEtat'});
     var el=$('dATraiter'); if(!el) return;
     // une ligne ignorée revient d'elle-même si son contenu change (nouveau doublon, autre montant…)
     it.forEach(function(x){ x.cle=cleAT(x.txt+'|'+(x.sous||'')+'|'+x.n); }); AT_CLES=it.map(function(x){ return x.cle; });
@@ -1684,7 +1684,7 @@ function qCond(q,p){ var b=qFmt(q,p&&p.unite); if(q==null||!p||!p.cond||!(p.cont
 function qFmt(q,u){ return (q==null?'?':String(Math.round(q*100)/100).replace('.',','))+' '+(u||''); }
 function rendreStockP(){
   var act=SC.produits.filter(function(p){return p.actif!==false}), bas=0;
-  var sansInv=!SMV.some(function(m){return m.type==='inventaire'});
+  var sansInv=!SMV.some(function(m){return m.type==='inventaire'&&!m.controleOuverture});
   var h=act.map(function(p){ var q=stockP(p.id), neg=q!=null&&q<0, lo=q!=null&&!neg&&p.seuil!=null&&q<=p.seuil; if(lo) bas++;
     return '<div class="row"><span class="l">'+esc(p.nom)+(p.fournisseur&&fourP(p.fournisseur)?' <span class="note">· '+esc(fourP(p.fournisseur).nom)+'</span>':'')+'</span><b class="num" style="'+(lo?'color:var(--danger)':'')+'">'+(neg?'<span class="note" title="Le calcul donne '+esc(qCond(q,p))+' : des livraisons n’ont pas été notées ou l’inventaire de départ manque">à compter</span>':qCond(q,p))+(lo?' · sous le seuil':'')+'</b></div>'; }).join('');
   if(sansInv&&act.length) h='<p class="note" style="margin:0 0 8px;color:var(--warn)"><b>En attente du premier inventaire.</b> Tant que la réserve et le comptoir n’ont pas été comptés une première fois (tablette du gérant → Stock → Inventaire), les quantités ne sont qu’une estimation.</p>'+h;
@@ -1866,9 +1866,11 @@ function chronologieStock(evs,mvts,R,ratios){
       var b={jour:it.jour,h:it.m.h||'',debut:per.debut,ca:per.ca,conso:per.conso,decl:per.decl,soir:per.soir,lignes:[]};
       (it.m.lignes||[]).forEach(function(l){ var pid=l.produit, cR=l.qte!=null?l.qte:null, cC=l.comptoir!=null?l.comptoir:null;
         var theo=(cR!=null?(reserve[pid]||0):0)+(cC!=null?(comptoir[pid]||0):0), compte=(cR!=null?cR:0)+(cC!=null?cC:0);
-        if(dejaInv[pid]&&(cR!=null||cC!=null)) b.lignes.push({pid:pid,theo:theo,compte:compte,ecart:theo-compte});
-        dejaInv[pid]=1; if(cR!=null) reserve[pid]=cR; if(cC!=null) comptoir[pid]=cC; });
-      bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{},soir:{}};
+        if((dejaInv[pid]||it.m.controleOuverture)&&(cR!=null||cC!=null)) b.lignes.push({pid:pid,theo:theo,compte:compte,ecart:theo-compte});
+        if(!it.m.controleOuverture) dejaInv[pid]=1; if(cR!=null) reserve[pid]=cR; if(cC!=null) comptoir[pid]=cC; });
+      // contrôle du comptoir à l'ouverture : affiché, mais ne compte pas comme un inventaire (la période des bilans continue)
+      if(it.m.controleOuverture){ b.controle=true; bilans.push(b); }
+      else { bilans.push(b); per={ca:0,conso:{},debut:it.jour,decl:{},soir:{}}; }
     }
   });
   cloreJour(jourCourant);
@@ -1903,6 +1905,7 @@ function rendreBilans(C){
     var vp=0, lignes=x.lignes.map(function(l){ var p=prodP(l.pid)||{nom:'?'}, pr=prixAchat(l.pid), v=pr!=null?l.ecart*pr:null; if(v!=null) vp+=v;
       return '<div class="row"><span class="l">'+esc(p.nom)+' <span class="note">attendu '+esc(qCond(Math.round(l.theo*100)/100,p))+' · compté '+esc(qCond(l.compte,p))+'</span></span><b class="num" style="color:'+(l.ecart>0.01?'var(--danger)':'var(--ok)')+'">'+(l.ecart>0.01?'−':l.ecart<-0.01?'+':'')+esc(qCond(Math.round(Math.abs(l.ecart)*100)/100,p))+(v!=null&&Math.abs(v)>=1?' · '+eur(Math.abs(v)):'')+'</b></div>'; }).join('');
     var caHT=x.ca/(1+(REGC.tvaVentes||6)/100), vt=valeurConso(x.conso).v, vd=valeurConso(x.decl||{}).v, vs=valeurConso(x.soir||{}).v, fcT=caHT?vt*100/caHT:null, fcR=caHT?(vt+vd+vs+Math.max(0,vp))*100/caHT:null;
+    if(x.controle) return '<div class="card" style="margin-bottom:10px"><b>Contrôle des viandes au comptoir, avant l’ouverture du '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' '+esc(x.h)+'</b> <span class="note">· attendu = ce que le système prévoyait au comptoir</span>'+lignes+'</div>';
     return '<div class="card" style="margin-bottom:10px"><b>Inventaire du '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' '+esc(x.h)+'</b> <span class="note">· période depuis le '+esc(String(x.debut||'').slice(8,10)+'/'+String(x.debut||'').slice(5,7))+'</span>'+lignes+
       '<p class="note" style="margin:8px 0 0">Pertes déclarées par le gérant : <b>'+eur(vd)+'</b>'+(vs>=1?' · manques au comptage du soir : <b style="color:var(--danger)">'+eur(vs)+'</b>':'')+' · écart non expliqué à l’inventaire : <b style="color:'+(vp>0?'var(--danger)':'var(--ok)')+'">'+eur(Math.max(0,vp))+'</b>'+(caHT?' · total '+((vd+vs+Math.max(0,vp))*100/caHT).toFixed(1).replace('.',',')+' % du CA HT':'')+(fcT!=null?' · food cost théorique <b>'+Math.round(fcT)+' %</b> · réel <b>'+Math.round(fcR)+' %</b>':'')+'</p></div>'; }).join('')
     :'<div class="empty">Pas encore de bilan : il faut au moins deux inventaires (le premier sert de point de départ). Demande au gérant de compter la réserve et le comptoir.</div>';
