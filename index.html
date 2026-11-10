@@ -2277,6 +2277,20 @@ function ouvrirVerification(f,piece,factureId){
 }
 
 /* ---- registre et TVA ---- */
+// cas exceptionnel noté à la main : un ticket payé avec de l'argent sorti de la caisse (la caisse du jour garde la sortie ; L'argent du mois ne compte que le ticket)
+function payeAvecCaisse(f){
+  var ref=db.collection('factures').doc(f.__id);
+  if(f.payeCaisse){ if(confirm('Ce ticket est noté « payé avec la caisse » (sortie de '+e2(f.payeCaisse.montant/100)+' à '+(f.payeCaisse.h||'?')+').\n\nRetirer cette indication ?')) ref.update({payeCaisse:firebase.firestore.FieldValue.delete()}).then(function(){ toast('Indication retirée'); }).catch(function(er){ alert('Impossible ('+(er.code||er.message)+')'); }); return; }
+  var j=String(f.date||f.jour||''); if(!j){ alert('Ce ticket n’a pas de date.'); return; }
+  evsSnap(j,j).then(function(s){
+    var so=s.docs.map(function(d){ return d.data(); }).filter(function(x){ return x.type==='tiroir'&&x.sortie&&!x.mixte&&x.montant>0; }).sort(function(a,b){ return String(a.h).localeCompare(String(b.h)); });
+    if(!so.length){ alert('Aucune sortie de caisse notée le '+j.slice(8,10)+'/'+j.slice(5,7)+'.'); return; }
+    var txt=so.map(function(x,i){ return (i+1)+')  '+(x.h||'')+' · '+eur(x.montant)+' · '+String(x.motif||x.categorie||'').replace(/^Sortie : /,''); }).join('\n');
+    var r=prompt('Ticket '+nomCourtF(f.fournisseur)+' de '+e2(f.totalTTC)+' du '+j.slice(8,10)+'/'+j.slice(5,7)+'.\nAvec quelle sortie de caisse a-t-il été payé ? Tape son numéro.\n\n'+txt,so.length===1?'1':''); if(r==null||!r.trim()) return;
+    var x=so[parseInt(r,10)-1]; if(!x){ alert('Numéro inconnu.'); return; }
+    return ref.update({payeCaisse:{jour:j,h:x.h||'',montant:x.montant,motif:String(x.motif||x.categorie||'')}}).then(function(){ toast('Noté : payé avec la caisse'); });
+  }).catch(function(er){ alert('Impossible ('+(er.code||er.message)+')'); });
+}
 function rendreRegistre(){
   var mois=$('faMois').value||moisCourant(); FAC.mois=mois;
   var aTraiter=FAC.liste.filter(function(x){return x.statut==='a_analyser'}), aVerif=FAC.liste.filter(function(x){return x.statut==='a_verifier'});
@@ -2286,7 +2300,7 @@ function rendreRegistre(){
   var ht=0, tva=0, ttc=0, parTaux={}, hausses=0;
   liste.forEach(function(x){ ht+=n2(x.totalHT); tva+=n2(x.totalTVA); ttc+=n2(x.totalTTC); hausses+=x.hausses||0; (x.tva||[]).forEach(function(t){ parTaux[t.taux]=(parTaux[t.taux]||0)+n2(t.montant); }); });
   var dblIds={}; facturesDoublons().forEach(function(x){ dblIds[x.__id]=1; });
-  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="note">—</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
+  var lignes=liste.map(function(x){ return '<tr><td>'+esc(x.date)+'</td><td title="'+esc(x.fournisseur)+'">'+esc(nomCourtF(x.fournisseur))+'</td><td>'+esc(x.numero||'')+'</td><td class="num">'+(sansHT(x)?'<span class="note">—</span>':e2(x.totalHT))+'</td><td class="num">'+e2(x.totalTVA)+'</td><td class="num">'+e2(x.totalTTC)+'</td><td>'+(dblIds[x.__id]?'<span class="tag ann" title="Même fournisseur et même numéro qu’une facture déjà enregistrée">en double</span> ':'')+(x.alertes?'<span class="tag ann">'+x.alertes+' alerte(s)</span>':'')+(x.hausses?' <span class="tag tir">'+x.hausses+' hausse(s)</span>':'')+(x.payeCaisse?' <span class="tag tir" title="Payé avec la sortie de caisse de '+esc(e2(x.payeCaisse.montant/100))+' à '+esc(x.payeCaisse.h||'')+'">payé avec la caisse</span>':'')+'</td><td>'+(x.piece?'<button class="btn small sec" data-fvoir="'+x.__id+'">Voir</button>':'')+' <button class="btn small sec" data-fedit="'+x.__id+'">Modifier</button> <button class="btn small sec" data-fcaisse="'+x.__id+'" title="Ce ticket a été payé avec de l’argent sorti de la caisse">Caisse</button> <button class="btn small danger" data-fsupp="'+x.__id+'">Supprimer</button></td></tr>'; }).join('');
   $('faRegistre').innerHTML=liste.length?'<div class="scroll"><table class="table"><tr><th>Date</th><th>Fournisseur</th><th>N°</th><th>HT</th><th>TVA</th><th>TTC</th><th>Contrôles</th><th></th></tr>'+lignes+'</table></div>':'<div class="empty">Aucune facture enregistrée pour ce mois.</div>';
   // TVA collectée sur les ventes (estimation au taux réglé) puis TVA à payer
   var taux=(REGC.tvaVentes!=null?REGC.tvaVentes:6), du=mois+'-01', au=mois+'-31';
@@ -2318,7 +2332,8 @@ document.addEventListener('change',function(e){
   if(e.target&&e.target.id==='faMois') rendreRegistre();
 });
 document.addEventListener('click',function(e){
-  var b=e.target.closest('[data-fvoir],[data-fedit],[data-fan],[data-fsupp],[data-fverif],#faExport'); if(!b) return;
+  var b=e.target.closest('[data-fvoir],[data-fedit],[data-fan],[data-fsupp],[data-fverif],[data-fcaisse],#faExport'); if(!b) return;
+  if(b.hasAttribute('data-fcaisse')){ var fc=FAC.liste.filter(function(x){return x.__id===b.getAttribute('data-fcaisse')})[0]; if(!fc) return; payeAvecCaisse(fc); return; }
   if(b.hasAttribute('data-fsupp')){
     var fs=FAC.liste.filter(function(x){return x.__id===b.getAttribute('data-fsupp')})[0]; if(!fs) return;
     if(!confirm('Supprimer définitivement '+(fs.statut==='validee'?'la facture '+(fs.fournisseur||'')+' du '+(fs.date||''):'cette photo')+' ?')) return;
@@ -2909,6 +2924,10 @@ function argentDuMois(o){
   // une sortie de caisse ou une dépense du même jour et du même montant qu'une facture = le même achat : compté une seule fois
   var dejaFacture={}; facts.forEach(function(f){ dejaFacture[String(f.date||f.jour)+'|'+Math.round(n2(f.totalTTC)*100)]=f; });
   function estFacture(j,m){ for(var d=-5;d<=5;d++) if(dejaFacture[j+'|'+(m+d)]) return dejaFacture[j+'|'+(m+d)]; return null; }
+  // tickets notés à la main « payé avec la caisse » : la sortie correspondante n'est pas recomptée
+  var payes=facts.filter(function(f){ return f.payeCaisse; });
+  var pris={};
+  function payeParSortie(x){ for(var i=0;i<payes.length;i++){ var p=payes[i].payeCaisse; if(p.jour===x.jour&&p.montant===x.montant&&(p.h||'')===(x.h||'')&&!pris[payes[i].__id]){ pris[payes[i].__id]=1; return payes[i]; } } return null; }
   var avancesInfo=[];
   function personnel(src,montant,txt,j,extra){
     var m=membreDuTexte(txt,membres);
@@ -2920,6 +2939,7 @@ function argentDuMois(o){
   o.evs.forEach(function(x){ if(x.type!=='tiroir'||!x.sortie||x.mixte||!x.montant) return;
     var txt=String(x.motif||x.categorie||'').replace(/^Sortie : /,''), f=estFacture(x.jour,x.montant);
     if(f){ N.marchandises.lignes.forEach(function(l){ if(l.id===f.__id) l.payeCaisse=true; }); return; }
+    var pm=payeParSortie(x); if(pm){ N.marchandises.lignes.forEach(function(l){ if(l.id===pm.__id){ l.payeCaisse=true; l.sortiCaisse=x.montant; } }); return; }
     var k=NATURE_SORTIE[norm(x.categorie)]||natureTexte(txt)||'autres';
     if(k==='personnel') personnel('caisse',x.montant,txt,x.jour); else ajoute(k,{src:'caisse',montant:x.montant,txt:txt,jour:x.jour}); });
   // 3. dépenses notées sur le téléphone
@@ -2977,9 +2997,9 @@ function lignesArgent(lignes){
   lignes.forEach(function(l){ if(l.src==='depense'){ ordre.push({dep:l}); return; }
     var cle=l.src==='facture'?'f|'+norm(nomCourtF(l.txt.split(' n° ')[0])):l.src==='caisse'?'c|'+l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.src+'|'+l.txt;
     if(!g[cle]){ g[cle]={src:l.src,txt:l.src==='facture'?l.txt.split(' n° ')[0]:l.src==='caisse'?l.txt.replace(/ \([^)]*×[^)]*\)$/,''):l.txt,montant:0,n:0,caisse:false}; ordre.push({g:g[cle]}); }
-    g[cle].montant+=l.montant; g[cle].n++; if(l.payeCaisse) g[cle].caisse=true; });
+    g[cle].montant+=l.montant; g[cle].n++; if(l.payeCaisse) g[cle].caisse=true; if(l.sortiCaisse) g[cle].monnaie=(g[cle].monnaie||[]).concat([eur(l.sortiCaisse)+' sortis']); });
   return ordre.sort(function(a,b){ return (b.g?b.g.montant:b.dep.montant)-(a.g?a.g.montant:a.dep.montant); }).map(function(o){
-    if(o.g) return '<div class="row"><span class="l">'+SRC_TAG[o.g.src]+' '+esc(o.g.txt)+(o.g.n>1?' <span class="note">('+o.g.n+(o.g.src==='facture'?' factures':' fois')+')</span>':'')+(o.g.caisse?' <span class="note">· payé avec la caisse</span>':'')+'</span><b class="num">'+eur(o.g.montant)+'</b></div>';
+    if(o.g) return '<div class="row"><span class="l">'+SRC_TAG[o.g.src]+' '+esc(o.g.txt)+(o.g.n>1?' <span class="note">('+o.g.n+(o.g.src==='facture'?' factures':' fois')+')</span>':'')+(o.g.caisse?' <span class="note">· payé avec la caisse'+(o.g.monnaie?' ('+esc(o.g.monnaie.join(' ; '))+')':'')+'</span>':'')+'</span><b class="num">'+eur(o.g.montant)+'</b></div>';
     var l=o.dep, x=l.dep;
     return '<div class="row"><span class="l">'+SRC_TAG.depense+' '+esc(x.jour.slice(8,10)+'/'+x.jour.slice(5,7))+' · '+esc(l.txt)+' <span class="note">'+esc(x.paiement||'')+'</span>'+(x.aRembourser?(x.rembourse?' <span class="tag carte">remboursé</span>':' <span class="tag tir">à rembourser</span>'):'')+'</span><span class="inline">'+
       (x.photo?'<button class="btn small sec" data-depvoir="'+x.__id+'">Ticket</button>':'')+(x.aRembourser&&!x.rembourse?'<button class="btn small sec" data-deprem="'+x.__id+'">Remboursé</button>':'')+'<button class="btn small danger" data-depsupp="'+x.__id+'">✕</button></span><b class="num">'+eur(x.montant)+'</b></div>';
