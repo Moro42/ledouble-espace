@@ -448,7 +448,7 @@ function vuePointage(){
 /* ---------- demande au gérant : recopier les heures des employés depuis le 1er novembre (avant la mise en place du pointage, le 11/11/2026) ---------- */
 var RATTRAPAGE={du:'2026-11-01',au:'2026-11-10'};
 function rattrapageManquant(cb){
-  var emp=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'; });
+  var emp=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'&&m.pointe!==false; });
   if(!emp.length){ cb([]); return; }
   var js=[], d=new Date(RATTRAPAGE.du+'T12:00:00'); while(jour(d)<=RATTRAPAGE.au){ if(d.getDay()!==0&&d.getDay()!==6) js.push(jour(d)); d.setDate(d.getDate()+1); }
   db.collection('pointages').where('jour','>=',RATTRAPAGE.du).get().then(function(s){
@@ -465,7 +465,7 @@ function afficherRattrapage(){
 }
 /* ---------- recopier une feuille d'heures papier (jours passés) ---------- */
 function vueFeuilleHeures(depuis){
-  var gens=MEMBRES.filter(function(m){ return m.role!=='proprietaire'; }).sort(function(a,b){ return (a.role==='gerant')-(b.role==='gerant'); });
+  var gens=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.pointe!==false; }).sort(function(a,b){ return (a.role==='gerant')-(b.role==='gerant'); });
   var d0=new Date(); d0.setDate(1); var debutMois=jour(d0);
   var st={membre:gens.length?gens[0].id:null, jour:null, arr:'10:00', dep:'16:00', pause:'0'}, PTS=[];
   function veille(){ var d=new Date(); d.setDate(d.getDate()-1); while(d.getDay()===0||d.getDay()===6) d.setDate(d.getDate()-1); return jour(d); }
@@ -560,7 +560,7 @@ function rendrePointage(){
     var viaBadge=e.dernier&&e.dernier.par==='badge';
     return '<div class="pt-ligne"><div><b>'+esc(m.nom)+'</b>'+(viaBadge?' <span class="sub" style="font-size:13px">· badge</span>':'')+(m.role==='gerant'?' <span class="sub">(gérant)</span>':'')+'<div class="sub" style="margin:2px 0 0">'+info+'</div>'+annul+'</div><div class="pt-actions">'+boutons+'</div></div>';
   }
-  var employes=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'; });   // employés seulement
+  var employes=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'&&m.pointe!==false; });   // employés seulement
   var planifies=employes.filter(function(m){ return prevus[m.id] || etatPersonne(m.id).etat!=='absent'; });
   var autres=employes.filter(function(m){ return planifies.indexOf(m)<0; });
   $('ptListe').innerHTML=employes.length?(planifies.length?planifies.map(ligne).join(''):'<p class="sub" style="margin:0">Personne n’est prévu aujourd’hui : choisis dans la liste ci-dessous.</p>'):'<p class="sub" style="margin:0">La liste de l’équipe n’a pas encore été créée par le propriétaire.</p>';
