@@ -1178,7 +1178,7 @@ function rendreSortiesDirect(){
     var C=chronologieStock(evs,mvts,R,ratios), bag=produitRegle('baguette',R), fr=produitRegle('frites',R);
     var d=C.jours[j]||{sorti:{},conso:{},perdu:{},comptoirFin:{},debut:{}};
     if(!C.jours[j]){ Object.keys(C.comptoir).forEach(function(pid){ if(C.comptoir[pid]>0.01){ d.debut[pid]=C.comptoir[pid]; d.comptoirFin[pid]=C.comptoir[pid]; } }); }
-    var ids={}; [d.debut,d.sorti,d.conso,d.perdu,d.comptoirFin].forEach(function(m){ Object.keys(m||{}).forEach(function(k){ if(Math.abs(m[k])>0.001) ids[k]=1; }); });
+    var ids={}; [d.debut,d.sorti,d.conso,d.perdu,d.comptoirFin].forEach(function(m){ Object.keys(m||{}).forEach(function(k){ if(k!=='sauces'&&Math.abs(m[k])>0.001) ids[k]=1; }); });
     var ordre=(SC.produits||[]).map(function(p){ return p.id; });
     var l=Object.keys(ids).sort(function(a,b){ if(a===bag) return -1; if(b===bag) return 1; return ordre.indexOf(a)-ordre.indexOf(b); });
     function q(v,p){ return v?esc(qCond(Math.round(v*10)/10,p)):'<span class="note">—</span>'; }
@@ -1815,6 +1815,7 @@ function consoVente(x,R,ratios){
   Object.keys(a.a).forEach(function(k){ add(k,a.a[k]); });
   if(ratios.frites) add('frites',a.portionsFrites*ratios.frites);
   if(ratios.crudites) add('crudites',a.sandwichs*ratios.crudites);
+  if(a.sandwichs&&prixAchat('sauces')!=null) out.sauces=(out.sauces||0)+a.sandwichs;   // sauces : coût moyen par sandwich (estimé d'après les factures)
   return out;
 }
 /* moyennes apprises (frites par portion, crudités par sandwich) : inventaires d'abord, sinon sorties sur la période */
@@ -1900,7 +1901,7 @@ function rendreSortiesJour(){
     // les moyennes apprises servent aussi au food cost en direct
     enregistrerAppris(ratios);
     var C=chronologieStock(evs,mvts,R,ratios), d=C.jours[j]||{sorti:{},conso:{},perdu:{},ca:0,comptoirFin:{}}; majPertesAuto(C);
-    var ids={}; Object.keys(d.sorti).concat(Object.keys(d.conso),Object.keys(d.perdu),Object.keys(d.comptoirFin)).forEach(function(k){ ids[k]=1; });
+    var ids={}; Object.keys(d.sorti).concat(Object.keys(d.conso),Object.keys(d.perdu),Object.keys(d.comptoirFin)).forEach(function(k){ if(k!=='sauces') ids[k]=1; });
     var frS=produitRegle('frites',R); d.resteCompte=d.resteCompte||{}; d.compteSoir=d.compteSoir||{}; d.prevuSoir=d.prevuSoir||{}; d.ecartSoir=d.ecartSoir||{}; d.manque=d.manque||{};
     var lignes=Object.keys(ids).map(function(pid){ var p=prodP(pid)||{nom:'?'}, cf=d.prevuSoir[pid]!=null?d.prevuSoir[pid]:(d.comptoirFin[pid]||0), suivi=C.suivi[pid]!=null&&C.suivi[pid]<=new Date(j+'T23:59:59').getTime(), mq=d.prevuSoir[pid]!=null?0:(d.manque[pid]||0);
       return '<tr><td>'+esc(p.nom)+'</td><td class="num">'+esc(qCond(d.sorti[pid]||0,p))+'</td><td class="num">'+esc(qCond(d.conso[pid]||0,p))+'</td><td class="num" style="'+(d.perdu[pid]?'color:var(--danger)':'')+'">'+(d.perdu[pid]?esc(qCond(d.perdu[pid],p))+(d.perteAuto&&d.perteAuto[pid]?' <span class="note">(dont '+esc(qFmt(d.perteAuto[pid],''))+' d’office, non vendues le soir)</span>':''):'—')+'</td><td class="num">'+(!suivi?'<span class="note">non suivi (aucune sortie notée)</span>':mq>0.01?'0 <span style="color:var(--warn);font-weight:700">· il manque '+esc(qCond(Math.round(mq*100)/100,p))+'</span> <span class="note">(sortie non notée ?)</span>':d.prevuSoir[pid]!=null&&cf<-0.01?'<span style="color:var(--danger)">'+esc(qFmt(Math.round(cf*10)/10,p.unite))+'</span>':esc(qCond(Math.round(Math.max(0,cf)*100)/100,p)))+'</td>'+(suivi?cellulesSoir(d,pid,p,j,frS):'<td colspan="2"></td>')+'</tr>'; }).join('');
@@ -2985,6 +2986,8 @@ function rendrePrixAchat(){
       (false&&x.aConfirmer?'<span class="tag tir">à confirmer : '+eur(x.aConfirmer.prix)+' / '+esc(x.aConfirmer.unite||'?')+'</span> <button class="btn small sec" data-pxok="'+p.id+'">Accepter</button> <button class="btn small sec" data-pxno="'+p.id+'">Ignorer</button>':'')+
       ' <button class="btn small sec" data-pxman="'+p.id+'">Modifier</button></td></tr>';
   }).join('');
+  var xs=PRIX.produits.sauces||{};
+  l+='<tr><td>Sauces <span class="note">(moyenne par sandwich)</span></td><td class="num">'+(xs.prix!=null?eur(xs.prix)+'<span class="note"> / sandwich</span>':'<span class="note">à fixer</span>')+'</td><td class="note">'+esc(xs.note||'estimé d’après les factures de sauces ÷ sandwichs vendus')+'</td><td><button class="btn small sec" data-pxman="sauces">Modifier</button></td></tr>';
   $('fiPrix').innerHTML=l?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Prix d’achat</th><th>Évolution</th><th></th></tr>'+l+'</table></div><p class="note">Prix fixés à la main avec « Modifier » (prix par unité du stock, ex. hamburger 0,26 € la pièce). Les factures ne changent plus jamais ces prix.</p>':'<div class="empty">Aucun produit dans le stock.</div>';
 }
 function donneesMois(mois){
@@ -3174,9 +3177,9 @@ function chargerMarges(carte){
     Object.keys(parJour).forEach(function(jj){ var aj=attenduDesVentes(parJour[jj],R), uj=utiliseDuJour(jj);
       ['frites','crudites'].forEach(function(k){ var pid=produitRegle(k,R); if(pid&&uj[pid]){ appr[k].u+=uj[pid]; appr[k].n+=(k==='frites'?aj.portionsFrites:aj.sandwichs); } }); });
     function px(cle){ var pid=produitRegle(cle,R); return pid?prixAchat(pid):null; }
-    var cBag=px('baguette'), cFrite=(appr.frites.n&&px('frites')!=null)?appr.frites.u/appr.frites.n*px('frites'):null, cCrud=(appr.crudites.n&&px('crudites')!=null)?appr.crudites.u/appr.crudites.n*px('crudites'):0, cCan=px('canette');
+    var cBag=px('baguette'), cFrite=(appr.frites.n&&px('frites')!=null)?appr.frites.u/appr.frites.n*px('frites'):null, cCrud=(appr.crudites.n&&px('crudites')!=null)?appr.crudites.u/appr.crudites.n*px('crudites'):0, cCan=px('canette'), cSauce=prixAchat('sauces')||0;
     var viande={hamburger:['steak','steakSimple','steakDouble'],mulky:['mulky','mulkySimple','mulkyDouble'],poulet:['poulet','pouletSimple','pouletDouble'],mexicanos:['mexicanos','mexicanos','mexicanos']};
-    function coutSandwich(id,taille){ var v=viande[id]; if(!v||cBag==null) return null; var pv=px(v[0]); if(pv==null) return null; var q=taille==='double'?R[v[2]]:R[v[1]]; return (taille==='double'?R.baguetteDouble:R.baguetteSimple)*cBag+q*pv+cCrud; }
+    function coutSandwich(id,taille){ var v=viande[id]; if(!v||cBag==null) return null; var pv=px(v[0]); if(pv==null) return null; var q=taille==='double'?R[v[2]]:R[v[1]]; return (taille==='double'?R.baguetteDouble:R.baguetteSimple)*cBag+q*pv+cCrud+cSauce; }
     var tva=REGC.tvaVentes!=null?REGC.tvaVentes:6, lignes=[];
     (carte.formules||[]).filter(function(f){return f.actif!==false}).forEach(function(f){ var c=coutSandwich(f.produit,f.taille); if(c!=null&&cFrite!=null&&cCan!=null) c+=cFrite+cCan; else c=null; lignes.push({nom:f.nom,prix:f.prix,cout:c}); });
     (carte.produits||[]).filter(function(p){return p.actif!==false}).forEach(function(p){ ['double','simple'].forEach(function(t){ if(p.prix&&p.prix[t]!=null) lignes.push({nom:p.nom+' '+t,prix:p.prix[t],cout:coutSandwich(p.id,t)}); }); });
