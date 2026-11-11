@@ -861,6 +861,8 @@ function rendreAudit(P,R,Rp,cur,prev,clos,pts,mvts,membres,pv,prixP,noms,cible){
     } else { minMp[m]=(minMp[m]||0)+tot; coutJMp[m]=(coutJMp[m]||0)+coutMinutes(tot,pv[m]); }
   });
   var cout=0, coutP=0;
+  Object.keys(pv).forEach(function(id){ var x=pv[id]; if(!x||!x.office) return; var mn=(x.heuresDecl||0)*60;
+    var jv=Object.keys(R.jours||{}), jvp=Object.keys(Rp.jours||{}); minM[id]=jv.length*mn; coutJM[id]=jv.length*coutMinutes(mn,x); minMp[id]=jvp.length*mn; coutJMp[id]=jvp.length*coutMinutes(mn,x); });
   Object.keys(coutJM).forEach(function(m){ cout+=coutJM[m]; });
   Object.keys(coutJMp).forEach(function(m){ coutP+=coutJMp[m]; });
   var heuresTot=Object.keys(minM).reduce(function(s,m){return s+minM[m]},0)/60;
@@ -1431,7 +1433,7 @@ function initEquipe(){
   Promise.all([cfgSnap('equipe'),cfgSnap('equipe_prive'),chargerBadges()]).then(function(r){
     EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
     var pv=r[1].exists?(r[1].data().membres||{}):{};
-    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement','palierH','palierTarif','pausePayee','fixeJour'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
+    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement','palierH','palierTarif','pausePayee','fixeJour','office','heuresDecl'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
   }).catch(function(){}).then(function(){
     rendreMembres(); semP=lundiP(); chargerPlanningP(); chargerPropositions(); chargerHeures('semaine');
   });
@@ -1443,7 +1445,7 @@ function rendreMembres(quotas){
   $('eqMembres').innerHTML=(EQ.membres.length?EQ.membres.map(function(m,i){
     var q='';
     if(m.role==='etudiant'){ var u=(m.soldeDepart||0)*60+(quotas[m.id]||0); q=' · <b class="num" style="color:'+(u>600*60?'var(--danger)':u>500*60?'var(--warn)':'var(--ink)')+'">'+Math.round(u/60)+' h utilisées sur 650</b>'; }
-    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.palierH&&m.palierTarif?' · '+String(m.palierH).replace('.',',')+' premières h à '+eur(m.palierTarif)+'/h puis '+eur(m.coutHoraire)+'/h':(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':''))+(m.pausePayee?' · pause payée':'')+(m.fixeJour?' · + '+eur(m.fixeJour)+'/jour en espèces':'')+q+'</span>'+ligneBadge(m)+'</span><span class="inline">'+(m.actif!==false&&badgeDe(m.id)?'<button class="btn small sec" data-badgex="'+esc(m.id)+'">Retirer le badge</button>':'')+'<button class="btn small sec" data-editm="'+i+'">Modifier</button></span></div>';
+    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.palierH&&m.palierTarif?' · '+String(m.palierH).replace('.',',')+' premières h à '+eur(m.palierTarif)+'/h puis '+eur(m.coutHoraire)+'/h':(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':''))+(m.pausePayee?' · pause payée':'')+(m.fixeJour?' · + '+eur(m.fixeJour)+'/jour en espèces':'')+(m.office?' · présent d’office ('+String(m.heuresDecl||0).replace('.',',')+' h déclarées/jour)':'')+q+'</span>'+ligneBadge(m)+'</span><span class="inline">'+(m.actif!==false&&badgeDe(m.id)?'<button class="btn small sec" data-badgex="'+esc(m.id)+'">Retirer le badge</button>':'')+'<button class="btn small sec" data-editm="'+i+'">Modifier</button></span></div>';
   }).join(''):'<div class="empty">Aucune personne pour l’instant.</div>');
 }
 function editerMembre(i){
@@ -1456,6 +1458,7 @@ function editerMembre(i){
     '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(m.coutHoraire)+'"></label>'+
     '<label class="f">Payé<select class="in" id="emPaie"><option value="">— à préciser —</option><option value="especes" '+(m.paiement==='especes'?'selected':'')+'>en espèces</option><option value="virement" '+(m.paiement==='virement'?'selected':'')+'>par virement</option></select></label></div>'+
     '<div class="inline"><label class="f">Palier : les … premières heures du jour<input class="in px" id="emPH" inputmode="decimal" value="'+(m.palierH?String(m.palierH).replace('.',','):'')+'" placeholder="ex. 3"></label><label class="f">payées €/h<input class="in px" id="emPT" inputmode="decimal" value="'+(m.palierTarif?vEur(m.palierTarif):'')+'" placeholder="ex. 13"></label><label class="switch" style="align-self:end"><input type="checkbox" id="emPause" '+(m.pausePayee?'checked':'')+'>Pause payée</label><label class="f">En plus, par jour travaillé (espèces) €<input class="in px" id="emFixe" inputmode="decimal" value="'+(m.fixeJour?vEur(m.fixeJour):'')+'" placeholder="ex. 60"></label></div>'+
+    '<div class="inline"><label class="switch" style="align-self:end"><input type="checkbox" id="emOffice" '+(m.office?'checked':'')+'>Présent d’office chaque jour d’ouverture (ne pointe pas)</label><label class="f">Heures déclarées par jour<input class="in px" id="emHD" inputmode="decimal" value="'+(m.heuresDecl?String(m.heuresDecl).replace('.',','):'')+'" placeholder="ex. 3"></label></div>'+
     '<p class="note" style="margin:0">Avec un palier, le « coût horaire » sert pour les heures suivantes (ex. Amine : 3 premières heures à 13 €, puis 10 €). Laisse vide s’il n’y a qu’un tarif.</p>'+
     '<label class="f" id="emSoldeL">Heures étudiant déjà utilisées cette année chez d’autres employeurs (solde de départ, voir Student@work)<input class="in px" id="emSolde" inputmode="numeric" value="'+esc(m.soldeDepart||0)+'"></label>'+
     '<label class="switch"><input type="checkbox" id="emActif" '+(m.actif!==false?'checked':'')+'>Fait partie de l’équipe actuelle</label>'+
@@ -1464,10 +1467,10 @@ function editerMembre(i){
   $('emNon').onclick=function(){ f.className='hidden'; };
   $('emOk').onclick=function(){
     m.nom=$('emNom').value.trim(); if(!m.nom){ alert('Le nom est obligatoire.'); return; }
-    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.paiement=$('emPaie').value; m.actif=$('emActif').checked; m.palierH=parseFloat(String($('emPH').value).replace(',','.'))||0; m.palierTarif=cents($('emPT').value)||0; m.pausePayee=$('emPause').checked; m.fixeJour=cents($('emFixe').value)||0;
+    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.paiement=$('emPaie').value; m.actif=$('emActif').checked; m.palierH=parseFloat(String($('emPH').value).replace(',','.'))||0; m.palierTarif=cents($('emPT').value)||0; m.pausePayee=$('emPause').checked; m.fixeJour=cents($('emFixe').value)||0; m.office=$('emOffice').checked; m.heuresDecl=parseFloat(String($('emHD').value).replace(',','.'))||0;
     if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
     var pub=EQ.membres.map(function(x){ return {id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; });
-    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||'',palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0}; });
+    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||'',palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0}; });
     Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; synchroBadgesCaisse().catch(function(){}); rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
   };
   f.scrollIntoView({behavior:'smooth'});
@@ -1542,6 +1545,8 @@ function traiterProposition(id,accepter){
 function coutMinutes(min,x){ x=x||{}; var h=(min||0)/60, t=x.coutHoraire||0, ph=parseFloat(x.palierH)||0, pt=x.palierTarif||0;
   var fixe=(min>0&&x.fixeJour)?x.fixeJour:0;   // supplément fixe par jour travaillé (ex. 60 € en espèces)
   if(ph>0&&pt>0) return Math.min(h,ph)*pt+Math.max(0,h-ph)*t+fixe; return h*t+fixe; }
+// présent d'office (ex. Mattheo, sans pointage) : compté chaque jour d'ouverture pour ses heures déclarées + son supplément
+function joursDeVente(evs){ var o={}; (evs||[]).forEach(function(x){ if(x&&x.type==='vente'&&x.jour) o[x.jour]=1; }); return Object.keys(o); }
 // pause payée : les pauses ne coupent pas la journée
 function selonPause(pts,x){ return x&&x.pausePayee?pts.filter(function(p){ return p.type!=='pause'&&p.type!=='reprise'; }):pts; }
 function intervalles(pts,finJournee){
@@ -1595,6 +1600,8 @@ function chargerHeures(per){
       var prevu={}; lus.forEach(function(lu){ (PL_P[lu]||[]).forEach(function(c){ if(c.jour>=du&&c.jour<=au) prevu[c.membre]=(prevu[c.membre]||0)+minu(c.fin)-minu(c.debut); }); });
       var ca=0; res[1].docs.forEach(function(d){ var x=d.data(); if(x.type==='vente') ca+=x.total; if(x.type==='annulation') ca-=x.montant||0; });
       var cout=0, lignes='';
+      var jv=joursDeVente(res[1].docs.map(function(d){ return d.data(); })).filter(function(j){ return j>=du&&j<=au; });
+      EQ.membres.forEach(function(m){ if(!m.office||m.actif===false) return; var mn=(m.heuresDecl||0)*60; presteP[m.id]=jv.length*mn; coutP_M[m.id]=jv.length*coutMinutes(mn,m); });
       var ids=EQ.membres.map(function(m){return m.id});
       ids.forEach(function(id){
         var m=EQ.membres.filter(function(x){return x.id===id})[0];
@@ -3008,7 +3015,7 @@ function membreDuTexte(t,membres){ var n=' '+norm(t)+' '; for(var i=0;i<membres.
 function argentDuMois(o){
   var N={}; NATURES.forEach(function(x){ N[x.k]={total:0,lignes:[]}; });
   function ajoute(k,l){ N[k].total+=l.montant; N[k].lignes.push(l); }
-  var membres=o.membres.map(function(m){ var x=o.prive[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif!==false,paiement:x.paiement||'',coutHoraire:x.coutHoraire||0,palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0}; });
+  var membres=o.membres.map(function(m){ var x=o.prive[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif!==false,paiement:x.paiement||'',coutHoraire:x.coutHoraire||0,palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0}; });
   // 1. factures du mois (sans les doubles)
   var dbl={}; facturesDoublons().forEach(function(x){ dbl[x.__id]=1; });
   var facts=o.factures.filter(function(f){ return (f.statut==='validee'||f.statut==='a_verifier') && !dbl[f.__id] && String(f.mois||String(f.date||f.jour||'').slice(0,7))===o.mois; });
@@ -3047,8 +3054,10 @@ function argentDuMois(o){
   o.pointages.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
   o.pointages.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
   var minParM={}, coutParM={}; Object.keys(parMJ).forEach(function(k){ var id=k.split('|')[0], mb=membres.filter(function(z){return z.id===id})[0], x=intervalles(selonPause(parMJ[k],mb),k.split('|')[1]<jour()); minParM[id]=(minParM[id]||0)+x.min; coutParM[id]=(coutParM[id]||0)+coutMinutes(x.min,mb); });
+  var jvM=joursDeVente(o.evs).filter(function(j){ return j.slice(0,7)===o.mois; });
+  membres.forEach(function(m){ if(!m.office||!m.actif) return; var mn=(m.heuresDecl||0)*60; minParM[m.id]=jvM.length*mn; coutParM[m.id]=jvM.length*coutMinutes(mn,m); });
   membres.forEach(function(m){ if(m.paiement!=='virement') return; var mn=minParM[m.id]||0; if(!mn) return;
-    ajoute('personnel',{src:'heures',montant:Math.round(coutParM[m.id]||0),txt:m.nom+' : '+(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+(m.coutHoraire?'':' (coût horaire à régler dans Équipe)')}); });
+    ajoute('personnel',{src:'heures',montant:Math.round(coutParM[m.id]||0),txt:m.nom+' : '+(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+(m.office?' déclarées sur '+jvM.length+' jours d’ouverture':'')+(m.fixeJour?' + '+eur(m.fixeJour)+' en espèces par jour':'')+(m.coutHoraire?'':' (coût horaire à régler dans Équipe)')}); });
   // 5. charges fixes
   (o.fixes||[]).forEach(function(c){ if(c.montant) ajoute('fixes',{src:'fixe',montant:c.montant,txt:c.nom}); });
   var sorti=0; NATURES.forEach(function(x){ sorti+=N[x.k].total; });
