@@ -1216,7 +1216,8 @@ function rendreATraiter(){
     if(sauts.length) it.push({n:sauts.length,txt:'Prix d’achat qui ont fortement changé : à vérifier',sous:esc(sauts.join(' · ')),v:'factures',cible:'fiPrix'});
     // fond pour la prochaine ouverture
     var fd=r[3]&&r[3].exists?r[3].data():null;
-    if(fd&&fd.montant!=null&&fd.jour<jour()&&fd.montant<REGC.fondCaisse) it.push({n:'!',grave:1,txt:'Fond incomplet pour la prochaine ouverture : '+eur(fd.montant)+' au lieu de '+eur(REGC.fondCaisse),sous:'Si tu complètes avec l’argent d’une enveloppe, note-le dans Caisse et argent',v:'enveloppes',cible:'enApport'});
+    // un fond fixé par le propriétaire lui-même (ex. 5 € pris pour la femme de ménage) est voulu : pas d'alerte
+    if(fd&&fd.montant!=null&&fd.jour<jour()&&fd.montant<REGC.fondCaisse&&fd.par!=='proprietaire') it.push({n:'!',grave:1,txt:'Fond incomplet pour la prochaine ouverture : '+eur(fd.montant)+' au lieu de '+eur(REGC.fondCaisse),sous:'Si tu complètes avec l’argent d’une enveloppe, note-le dans Caisse et argent',v:'enveloppes',cible:'enApport'});
     // enveloppes au coffre
     if(r[1]&&r[2]){
       var recup={}, retire={}; r[2].docs.forEach(function(d){ var dd=d.data(); if(dd.le) recup[d.id]=1; retire[d.id]=dd.retire||0; });
@@ -1263,7 +1264,7 @@ function majCloture(){
   var fp=fondPrevuAujourdhui(), b=bilanJour(closJour,r.cash,r.sorties,apportsDuJour(jour()),fp?fp.montant:null);
   var h='';
   h+=ligneB('Ouverture',b.ouv?(b.ouv.ok?'fond complet à '+b.ouv.h:'<span style="color:var(--danger)">différence : '+eur(b.ouv.montant)+' compté à '+b.ouv.h+' (prévu '+eur(b.ouv.fondPrevu)+')</span>'):'<span style="color:var(--warn)">pas encore faite</span>');
-  h+=ligneB('Fond de caisse'+(!b.ouv&&fp?' <span class="note">(laissé le '+esc(fp.jour.slice(8,10)+'/'+fp.jour.slice(5,7))+(fp.apport?' : '+eur(fp.avantApport)+' + '+eur(fp.apport)+' remis d’une enveloppe':'')+')</span>':''),eur(b.fond)+(!b.ouv&&fp&&fp.montant<REGC.fondCaisse?' <span class="tag ann">incomplet</span>':''));
+  h+=ligneB('Fond de caisse'+(!b.ouv&&fp?' <span class="note">(laissé le '+esc(fp.jour.slice(8,10)+'/'+fp.jour.slice(5,7))+(fp.apport?' : '+eur(fp.avantApport)+' + '+eur(fp.apport)+' remis d’une enveloppe':'')+')</span>':''),eur(b.fond)+(!b.ouv&&fp&&fp.montant<REGC.fondCaisse?(fp.par==='proprietaire'?' <span class="tag">fixé par toi</span>':' <span class="tag ann">incomplet</span>'):''));
   h+=ligneB('+ Ventes en espèces',eur(r.cash));
   if(r.sorties) h+=ligneB('− Sorties d’argent','−'+eur(r.sorties));
   if(b.apport) h+=ligneB('+ Remis d’une enveloppe',eur(b.apport));
