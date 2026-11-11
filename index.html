@@ -245,7 +245,7 @@ body.connecte .ass-fab{display:block}
     <button class="out" id="btnOut">Quitter</button>
   </header>
   <nav class="nav" id="nav">
-    <button data-v="direct" aria-current="page">Aujourd’hui</button><button data-v="historique">Chiffres</button><button data-v="enveloppes">Caisse et argent</button><button data-v="factures">Achats et coûts</button><button data-v="stock">Stock</button><button data-v="equipe">Équipe</button>
+    <button data-v="direct" aria-current="page">Aujourd’hui</button><button data-v="historique">Chiffres</button><button data-v="enveloppes">Caisse et argent</button><button data-v="factures">Achats et coûts</button><button data-v="stock">Stock</button><button data-v="equipe">Personnel</button>
     <span class="nav-sep"></span><button data-v="reglages">⚙ Paramètres</button>
   </nav>
   <main>
@@ -341,7 +341,11 @@ body.connecte .ass-fab{display:block}
 
     <!-- ÉQUIPE -->
     <section class="view" id="v-equipe">
-      <h2>Équipe</h2>
+      <h2>Personnel</h2>
+      <h3>Salaires du mois <input class="in" type="month" id="peMois" style="width:auto;font-size:14px;margin-left:8px"></h3>
+      <div class="card" id="peSalaires"><div class="empty">Chargement…</div></div>
+      <h3>Paiements du mois</h3>
+      <div class="card" id="pePaiements"><div class="empty">Chargement…</div></div>
       <h3>Propositions du gérant</h3><div class="card" id="eqProps"><div class="empty">Chargement…</div></div>
       <h3>Planning</h3>
       <div class="inline" style="margin-bottom:10px"><button class="btn small sec" id="eqPrev">‹</button><b id="eqSemaine"></b><button class="btn small sec" id="eqNext">›</button><button class="btn small sec" id="eqCopie">Copier la semaine précédente</button></div>
@@ -575,7 +579,7 @@ auth.onAuthStateChanged(function(u){
 /* ---------- navigation ---------- */
 // chaque bloc ne se charge qu'une fois, même s'il est partagé entre deux onglets
 function uneFois(cle,fn){ if(!faites[cle]){ faites[cle]=true; fn(); } }
-var vues={direct:null,enveloppes:initEnveloppes,audit:initAudit,equipe:initEquipe,
+var vues={direct:null,enveloppes:initEnveloppes,audit:initAudit,equipe:function(){ initEquipe(); chargerPersonnel(); },
   stock:function(){ uneFois('_stock',initStock); },
   factures:function(){ initFactures(); uneFois('_finances',initFinances); },
   historique:function(){ initHistorique(); uneFois('_finances',initFinances); },
@@ -764,7 +768,7 @@ function rendreDirect(evs,nouveaux){
     else if(x.type==='tiroir' && x.sortie){ tag='<span class="tag tir">Sortie</span>'; lib=esc(x.categorie||'')+(x.quantite?' ('+x.quantite+' × '+eur(x.prixUnitaire)+')':'')+(x.precision?' : '+esc(x.precision):'')+' · '+(x.qui?esc(x.qui):(x.via==='cle'?'clé gérant':'code gérant')); mt='−'+eur(x.montant); }
     else if(x.type==='tiroir'){ tag='<span class="tag tir">Tiroir</span>'; lib=esc(x.motif)+' · '+(x.qui?esc(x.qui):(x.via==='cle'?'clé gérant':'code gérant')); }
     else if(x.type==='pointage'){ tag='<span class="tag">Pointage</span>'; lib=esc(x.nom||'')+' · '+({arrivee:'arrivée',pause:'pause',reprise:'reprise',depart:'départ'}[x.ptype]||x.ptype)+' (badge)'; }
-    else if(x.type==='badge_inconnu'){ tag='<span class="tag tir">Badge</span>'; lib='Badge inconnu passé sur la caisse · à associer dans Équipe'; }
+    else if(x.type==='badge_inconnu'){ tag='<span class="tag tir">Badge</span>'; lib='Badge inconnu passé sur la caisse · à associer dans Personnel'; }
     else if(x.type==='badge_associe'){ tag='<span class="tag">Badge</span>'; lib='Badge de pointage associé à '+esc(x.nom||'')+' (sur la caisse)'; }
     return '<div class="row'+(nouveaux['_']||isNew(x,nouveaux)?' flash':'')+'"><span class="t num">'+hhmm(x.tsClient)+'</span><span class="l">'+tag+' '+lib+'</span><b class="num">'+mt+'</b></div>';
   }).join(''):'<div class="empty">Aucune vente aujourd’hui pour l’instant. Elles apparaîtront ici en direct.</div>';
@@ -1471,7 +1475,7 @@ function editerMembre(i){
     if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
     var pub=EQ.membres.map(function(x){ return {id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; });
     var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||'',palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0}; });
-    Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; synchroBadgesCaisse().catch(function(){}); rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
+    Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()},{mergeFields:['membres','maj']})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; synchroBadgesCaisse().catch(function(){}); rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
   };
   f.scrollIntoView({behavior:'smooth'});
 }
@@ -2720,7 +2724,7 @@ function rafraichirBlocsDuJour(){
 
 /* ---------- pages et navigation ---------- */
 var PASTILLES={};
-var ONGLETS_PASTILLE={'outil-equipe':['equipe','Équipe'],'outil-stock':['stock','Stock'],'outil-factures':['factures','Achats et coûts']};
+var ONGLETS_PASTILLE={'outil-equipe':['equipe','Personnel'],'outil-stock':['stock','Stock'],'outil-factures':['factures','Achats et coûts']};
 function mettrePastille(type,n){ PASTILLES[type]=n||0; if(typeof majATraiter==='function') majATraiter(); var o=ONGLETS_PASTILLE[type]; if(o){ var bt=document.querySelector('[data-v="'+o[0]+'"]'); if(bt) bt.textContent=o[1]+(n?' ('+n+')':''); } }
 function pastillePage(p){ var t=0; p.blocs.forEach(function(b){ t+=PASTILLES[b.type]||0; }); return t; }
 function pageCourante(){ for(var i=0;i<MP.pages.length;i++) if(MP.pages[i].id===MP.courante) return MP.pages[i]; return MP.pages[0]; }
@@ -2982,11 +2986,9 @@ function rendrePrixAchat(){
   }).join('');
   $('fiPrix').innerHTML=l?'<div class="scroll"><table class="table"><tr><th>Produit</th><th>Prix d’achat</th><th>Évolution</th><th></th></tr>'+l+'</table></div><p class="note">Prix fixés à la main avec « Modifier » (prix par unité du stock, ex. hamburger 0,26 € la pièce). Les factures ne changent plus jamais ces prix.</p>':'<div class="empty">Aucun produit dans le stock.</div>';
 }
-function rendreResultat(){
-  var mois=$('fiMois').value||jour().slice(0,7), du=mois+'-01', au=mois+'-31', tva=REGC.tvaVentes!=null?REGC.tvaVentes:6;
-  $('fiCharges').innerHTML=FIN.charges.map(function(c,i){ return '<div class="inline" style="margin-bottom:6px"><input class="in" data-chn="'+i+'" value="'+esc(c.nom)+'" style="flex:1"><input class="in px num" data-chm="'+i+'" inputmode="decimal" value="'+vEur(c.montant)+'" placeholder="€ / mois"><button class="btn small danger" data-chx="'+i+'">✕</button></div>'; }).join('')+'<button class="btn small sec" id="fiAddCh">+ Ajouter une charge</button> <button class="btn small prim" id="fiSaveCh">Enregistrer les charges</button>';
-  $('fiResultat').innerHTML='<div class="empty">Calcul en cours…</div>';
-  Promise.all([
+function donneesMois(mois){
+  var du=mois+'-01', au=mois+'-31';
+  return Promise.all([
     evsSnap(du,au),
     facturesSnap(),
     memoQ('pt|'+du+'|'+au,function(){ return pointagesFusion(du,au); }),
@@ -2995,9 +2997,19 @@ function rendreResultat(){
     cfgSnap('equipe')
   ]).then(function(r){
     var evs=r[0].docs.map(function(d){return d.data()}).filter(function(x){return x.type!=='test'});
+    var pv=r[3].exists?r[3].data():{};
+    return {evs:evs,o:{mois:mois,evs:evs,factures:r[1].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }),pointages:r[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}),
+      prive:pv.membres||{},paieMois:pv.paiementsMois||{},membres:r[5].exists?(r[5].data().membres||[]):[],depenses:(r[4]||[]).slice(),fixes:FIN.charges}};
+  });
+}
+function rendreResultat(){
+  var mois=$('fiMois').value||jour().slice(0,7), du=mois+'-01', au=mois+'-31', tva=REGC.tvaVentes!=null?REGC.tvaVentes:6;
+  $('fiCharges').innerHTML=FIN.charges.map(function(c,i){ return '<div class="inline" style="margin-bottom:6px"><input class="in" data-chn="'+i+'" value="'+esc(c.nom)+'" style="flex:1"><input class="in px num" data-chm="'+i+'" inputmode="decimal" value="'+vEur(c.montant)+'" placeholder="€ / mois"><button class="btn small danger" data-chx="'+i+'">✕</button></div>'; }).join('')+'<button class="btn small sec" id="fiAddCh">+ Ajouter une charge</button> <button class="btn small prim" id="fiSaveCh">Enregistrer les charges</button>';
+  $('fiResultat').innerHTML='<div class="empty">Calcul en cours…</div>';
+  donneesMois(mois).then(function(D){
+    var evs=D.evs;
     var R=analyser(evs), caTTC=R.ca, caHT=caTTC/(1+tva/100), joursV=Object.keys(R.jours).length;
-    var A=argentDuMois({mois:mois,evs:evs,factures:r[1].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }),pointages:r[2].docs.map(function(d){var o=d.data();o.__id=d.id;return o}),
-      prive:r[3].exists?(r[3].data().membres||{}):{},membres:r[5].exists?(r[5].data().membres||[]):[],depenses:DEP.liste,fixes:FIN.charges});
+    var A=argentDuMois(D.o);
     rendreArgent(A,R,caHT,joursV,tva);
     var collectee=caTTC-caHT;
     function l(t,v,st){ return '<div class="row"'+(st?' style="'+st+'"':'')+'><span class="l">'+t+'</span><b class="num">'+v+'</b></div>'; }
@@ -3005,6 +3017,37 @@ function rendreResultat(){
   }).catch(function(e){ $('fiResultat').innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
 }
 
+/* ---------- PERSONNEL : salaires du mois (coût, payé, à payer) et paiements rangés par mois — propriétaire uniquement ---------- */
+function moisPrec(m){ var d=new Date(m+'-15T12:00:00'); d.setMonth(d.getMonth()-1); return jour(d).slice(0,7); }
+function nomMois(m){ return new Date(m+'-15T12:00:00').toLocaleDateString('fr-BE',{month:'long'}); }
+function chargerPersonnel(){
+  var el=$('peSalaires'); if(!el) return;
+  if(!$('peMois').value) $('peMois').value=jour().slice(0,7);
+  var mois=$('peMois').value;
+  donneesMois(mois).then(function(D){ var A=argentDuMois(D.o);
+    var tc=0, tp=0; A.paie.forEach(function(x){ tc+=x.cout; tp+=x.paye; });
+    function kpi(t,v,c){ return '<div class="kpi"><span>'+t+'</span><b class="num"'+(c?' style="color:'+c+'"':'')+'>'+v+'</b></div>'; }
+    el.innerHTML='<div class="grid kpis" style="margin-bottom:10px">'+kpi('Coût du mois',eur(tc))+kpi('Déjà payé',eur(tp))+kpi('Reste à payer',eur(A.aPayer),A.aPayer?'var(--warn)':'var(--ok)')+'</div>'+
+      '<div class="scroll"><table class="table"><tr><th>Personne</th><th>Calcul</th><th class="num">Coût</th><th class="num">Payé</th><th class="num">À payer</th></tr>'+
+      A.paie.map(function(x){ var ap=x.cout-x.paye;
+        return '<tr><td><b>'+esc(x.nom)+'</b></td><td class="note">'+(x.min?esc(x.det):(x.office?'aucun jour d’ouverture':'pas encore d’heures (à pointer ou recopier sur la tablette)'))+'</td><td class="num">'+eur(x.cout)+'</td><td class="num">'+eur(x.paye)+'</td><td class="num"'+(ap>0?' style="color:var(--warn);font-weight:700"':'')+'>'+(ap>0?eur(ap):ap<0?'<span class="tag">payé '+eur(-ap)+' d’avance</span>':'—')+'</td></tr>'; }).join('')+'</table></div>'+
+      '<p class="note">Coût = ce que le mois coûte au jour le jour (c’est lui qui compte dans « L’argent du mois »). Payé = sorties de caisse et dépenses au nom de la personne, rangées dans ce mois. Confidentiel : ni la tablette ni la caisse n’y ont accès.</p>';
+    var pm=A.paiements.filter(function(p){ return p.id&&(p.jour.slice(0,7)===mois||p.mois===mois); }).sort(function(a,b){ return String(a.jour).localeCompare(String(b.jour)); });
+    $('pePaiements').innerHTML=pm.length?'<div class="scroll"><table class="table"><tr><th>Jour</th><th>Pour</th><th>Noté</th><th class="num">Montant</th><th>Compte pour le mois de</th></tr>'+
+      pm.map(function(p){ var m0=p.jour.slice(0,7), opts=[moisPrec(m0),m0];
+        return '<tr><td>'+esc(p.jour.slice(8,10)+'/'+p.jour.slice(5,7))+'</td><td><b>'+esc(p.nom)+'</b></td><td class="note">'+(p.src==='caisse'?'sortie de caisse':'dépense')+' · '+esc(p.txt)+'</td><td class="num">'+eur(p.montant)+'</td><td><select class="in" data-paiemois="'+esc(p.cle)+'" style="width:auto">'+opts.map(function(o){ return '<option value="'+o+'"'+(o===p.mois?' selected':'')+'>'+esc(nomMois(o))+'</option>'; }).join('')+'</select></td></tr>'; }).join('')+'</table></div><p class="note">Un salaire payé début de mois pour le mois d’avant : choisis le mois d’avant, il ne compte alors plus dans ce mois-ci.</p>'
+      :'<div class="empty">Aucun paiement de personnel noté pour ce mois.</div>';
+  }).catch(function(e){ el.innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
+}
+document.addEventListener('change',function(e){
+  if(e.target&&e.target.id==='peMois'){ chargerPersonnel(); return; }
+  var s=e.target&&e.target.closest&&e.target.closest('[data-paiemois]'); if(!s) return;
+  s.disabled=true;
+  db.collection('config').doc('equipe_prive').update(new firebase.firestore.FieldPath('paiementsMois',s.getAttribute('data-paiemois')),s.value)
+    .then(function(){ toast('Paiement rangé en '+nomMois(s.value)); setTimeout(function(){ chargerPersonnel(); if($('fiResultat')&&faites&&faites._finances) rendreResultat(); },400); })
+    .catch(function(er){ s.disabled=false; alert('Enregistrement impossible ('+(er.code||er.message)+')'); });
+});
+document.addEventListener('click',function(e){ var a=e.target.closest('[data-allera]'); if(!a) return; e.preventDefault(); allerA(a.getAttribute('data-allera'),'peSalaires'); });
 /* ---------- L'ARGENT DU MOIS : tout ce qui sort du même cash, rangé par nature, sans double compte ---------- */
 var NATURES=[{k:'marchandises',t:'Marchandises'},{k:'emballages',t:'Emballages et entretien'},{k:'personnel',t:'Personnel'},{k:'fixes',t:'Charges fixes'},{k:'autres',t:'Autres'}];
 var NATURE_SORTIE={'baguettes':'marchandises','viande':'marchandises','boissons':'marchandises','legumes':'marchandises','emballages':'emballages','produits d entretien':'emballages','avance sur salaire':'personnel'};
@@ -3029,11 +3072,15 @@ function argentDuMois(o){
   var payes=facts.filter(function(f){ return f.payeCaisse; });
   var pris={};
   function payeParSortie(x){ for(var i=0;i<payes.length;i++){ var p=payes[i].payeCaisse; if(p.jour===x.jour&&p.montant===x.montant&&(p.h||'')===(x.h||'')&&!pris[payes[i].__id]){ pris[payes[i].__id]=1; return payes[i]; } } return null; }
-  var avancesInfo=[];
-  function personnel(src,montant,txt,j,extra){
-    var m=membreDuTexte(txt,membres);
-    if(m&&m.paiement==='virement'){ avancesInfo.push({src:src,montant:montant,txt:txt,jour:j,nom:m.nom}); return; } // acompte déjà compris dans son salaire
-    ajoute('personnel',Object.assign({src:src,montant:montant,txt:txt,jour:j,sansNom:!m},extra||{}));
+  var avancesInfo=[], paiements=[], paye={}, paieMois=o.paieMois||{};
+  // un paiement de personnel : rangé dans le mois choisi (par défaut celui où l'argent est sorti) ;
+  // au nom d'un membre de l'équipe → « déjà payé » (son coût est compté par ses heures) ; sans nom (ex. femme de ménage) → compté tel quel
+  function personnel(src,montant,txt,j,extra,cle){
+    var m=membreDuTexte(txt,membres), mp=paieMois[cle]||String(j).slice(0,7);
+    paiements.push({cle:cle,src:src,montant:montant,txt:txt,jour:j,id:m?m.id:null,nom:m?m.nom:null,mois:mp});
+    if(mp!==o.mois) return;
+    if(m){ paye[m.id]=(paye[m.id]||0)+montant; return; }
+    ajoute('personnel',Object.assign({src:src,montant:montant,txt:txt,jour:j,sansNom:true},extra||{}));
   }
   // 2. sorties d'argent du tiroir
   var annul={}; o.evs.forEach(function(x){ if(x.type==='annulation') annul[x.ref]=1; });
@@ -3042,13 +3089,13 @@ function argentDuMois(o){
     if(f){ N.marchandises.lignes.forEach(function(l){ if(l.id===f.__id) l.payeCaisse=true; }); return; }
     var pm=payeParSortie(x); if(pm){ N.marchandises.lignes.forEach(function(l){ if(l.id===pm.__id){ l.payeCaisse=true; l.sortiCaisse=x.montant; } }); return; }
     var k=NATURE_SORTIE[norm(x.categorie)]||natureTexte(txt)||'autres';
-    if(k==='personnel') personnel('caisse',x.montant,txt,x.jour); else ajoute(k,{src:'caisse',montant:x.montant,txt:txt,jour:x.jour}); });
+    if(k==='personnel') personnel('caisse',x.montant,txt,x.jour,null,'c|'+x.jour+'|'+(x.h||'')+'|'+x.montant); else ajoute(k,{src:'caisse',montant:x.montant,txt:txt,jour:x.jour}); });
   // 3. dépenses notées sur le téléphone
   o.depenses.forEach(function(x){ var txt=x.categorie+(x.note?' · '+x.note:''), f=estFacture(x.jour,x.montant);
     if(f) return;
     var k=NATURE_DEPENSE[norm(x.categorie)]||natureTexte(x.note)||natureTexte(x.categorie)||'autres';
     var extra={dep:x};
-    if(k==='personnel') personnel('depense',x.montant,txt,x.jour,extra); else ajoute(k,Object.assign({src:'depense',montant:x.montant,txt:txt,jour:x.jour},extra)); });
+    if(k==='personnel') personnel('depense',x.montant,txt,x.jour,extra,'d|'+x.__id); else ajoute(k,Object.assign({src:'depense',montant:x.montant,txt:txt,jour:x.jour},extra)); });
   // 4. personnel payé par virement : heures pointées × coût horaire
   var parMJ={}, refs={};
   o.pointages.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
@@ -3056,12 +3103,16 @@ function argentDuMois(o){
   var minParM={}, coutParM={}; Object.keys(parMJ).forEach(function(k){ var id=k.split('|')[0], mb=membres.filter(function(z){return z.id===id})[0], x=intervalles(selonPause(parMJ[k],mb),k.split('|')[1]<jour()); minParM[id]=(minParM[id]||0)+x.min; coutParM[id]=(coutParM[id]||0)+coutMinutes(x.min,mb); });
   var jvM=joursDeVente(o.evs).filter(function(j){ return j.slice(0,7)===o.mois; });
   membres.forEach(function(m){ if(!m.office||!m.actif) return; var mn=(m.heuresDecl||0)*60; minParM[m.id]=jvM.length*mn; coutParM[m.id]=jvM.length*coutMinutes(mn,m); });
-  membres.forEach(function(m){ if(m.paiement!=='virement') return; var mn=minParM[m.id]||0; if(!mn) return;
-    ajoute('personnel',{src:'heures',montant:Math.round(coutParM[m.id]||0),txt:m.nom+' : '+(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+(m.office?' déclarées sur '+jvM.length+' jours d’ouverture':'')+(m.fixeJour?' + '+eur(m.fixeJour)+' en espèces par jour':'')+(m.coutHoraire?'':' (coût horaire à régler dans Équipe)')}); });
+  var paie=[], aPayer=0;
+  membres.forEach(function(m){ if(!m.actif||m.role==='proprietaire') return; var mn=minParM[m.id]||0, cout=Math.round(coutParM[m.id]||0), py=paye[m.id]||0;
+    var det=(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+(m.office?' déclarées sur '+jvM.length+' jours d’ouverture':'')+(m.fixeJour?' + '+eur(m.fixeJour)+' en espèces par jour':'');
+    paie.push({id:m.id,nom:m.nom,role:m.role,min:mn,office:!!m.office,cout:cout,paye:py,det:det}); aPayer+=Math.max(0,cout-py);
+    if(cout) ajoute('personnel',{src:'heures',montant:cout,txt:m.nom+' : '+det+' · payé '+eur(py)+(cout>py?' · à payer '+eur(cout-py):'')});
+  });
   // 5. charges fixes
   (o.fixes||[]).forEach(function(c){ if(c.montant) ajoute('fixes',{src:'fixe',montant:c.montant,txt:c.nom}); });
   var sorti=0; NATURES.forEach(function(x){ sorti+=N[x.k].total; });
-  return {N:N,sorti:sorti,tvaRec:tvaRec,achatsHT:achatsHT,avancesInfo:avancesInfo,membresSansMode:membres.filter(function(m){ return !m.paiement&&m.actif&&m.role!=='proprietaire'; }).map(function(m){ return m.nom; }),dep:o.depenses};
+  return {N:N,sorti:sorti,tvaRec:tvaRec,achatsHT:achatsHT,avancesInfo:avancesInfo,membresSansMode:[],dep:o.depenses,paie:paie,paiements:paiements,aPayer:aPayer};
 }
 var SRC_TAG={facture:'<span class="tag carte">facture</span>',caisse:'<span class="tag tir">caisse</span>',depense:'<span class="tag dep">dépense</span>',heures:'<span class="tag">heures</span>',fixe:'<span class="tag">fixe</span>'};
 function rendreArgent(A,R,caHT,joursV,tva){
@@ -3070,7 +3121,7 @@ function rendreArgent(A,R,caHT,joursV,tva){
   var h='<div class="grid kpis" style="margin-bottom:12px">'+
     kpi('Rentré (ventes)',eur(R.ca),'espèces '+eur(R.cash)+' · carte '+eur(R.carte))+
     kpi('Sorti',eur(A.sorti),'tout compris')+
-    kpi('Reste',(reste>=0?'+':'')+eur(reste),N.fixes.total?'après charges fixes':'charges fixes pas encore notées',reste>=0?'var(--ok)':'var(--danger)')+
+    kpi('Reste',(reste>=0?'+':'')+eur(reste),(A.aPayer?'dont '+eur(A.aPayer)+' de salaires à payer · ':'')+(N.fixes.total?'après charges fixes':'charges fixes pas encore notées'),reste>=0?'var(--ok)':'var(--danger)')+
     kpi('Food cost réel',fc!=null?fc.toFixed(1).replace('.',',')+' %':'—','marchandises ÷ ventes · cible 28 à 33 %',fc!=null&&fc>33?'var(--warn)':'var(--ok)')+'</div>';
   NATURES.forEach(function(x){ var n=N[x.k]; var srcs={}; n.lignes.forEach(function(l){ srcs[l.src]=1; });
     var vide=!n.lignes.length;
@@ -3080,7 +3131,8 @@ function rendreArgent(A,R,caHT,joursV,tva){
   if(A.avancesInfo.length) h+='<p class="note">Avances déjà comprises dans un salaire payé par virement (pas comptées deux fois) : '+A.avancesInfo.map(function(a){ return esc(a.nom)+' '+eur(a.montant); }).join(' · ')+'</p>';
   if(A.membresSansMode.length) h+='<p class="note" style="color:var(--warn)">Indique dans Équipe si ces personnes sont payées en espèces ou par virement : '+esc(A.membresSansMode.join(', '))+'. En attendant, seul l’argent réellement sorti pour elles est compté.</p>';
   var sansNom=N.personnel.lignes.filter(function(l){ return l.sansNom&&l.src!=='heures'; });
-  if(sansNom.length) h+='<p class="note">'+sansNom.length+' paiement(s) de personnel sans prénom reconnu : compté(s) comme payé(s) en espèces.</p>';
+  if(sansNom.length) h+='<p class="note">'+sansNom.length+' paiement(s) de personnel sans prénom de l’équipe (ex. femme de ménage) : compté(s) tel(s) quel(s).</p>';
+  h+='<p class="note">Personnel : le coût du mois est compté au jour le jour (heures, jours d’ouverture) ; le détail payé / à payer est dans l’onglet <a href="#" data-allera="equipe">Personnel</a>.</p>';
   // seuil de rentabilité : ventes nécessaires par jour pour couvrir tout ce qui n'est pas de la marchandise (montants réels, sans TVA)
   var partMarch=R.ca?N.marchandises.total/R.ca:0, autresCouts=N.personnel.total+N.fixes.total+N.emballages.total+N.autres.total, jOuv=joursV||22;
   var seuil=partMarch<1?autresCouts/(1-partMarch):null;
