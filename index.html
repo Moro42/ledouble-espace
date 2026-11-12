@@ -346,6 +346,8 @@ body.connecte .ass-fab{display:block}
       <div class="card" id="peSalaires"><div class="empty">Chargement…</div></div>
       <h3>Paiements du mois</h3>
       <div class="card" id="pePaiements"><div class="empty">Chargement…</div></div>
+      <h3>Repas de l’équipe</h3>
+      <div class="card" id="peRepas"><div class="empty">Chargement…</div></div>
       <h3>Propositions du gérant</h3><div class="card" id="eqProps"><div class="empty">Chargement…</div></div>
       <h3>Planning</h3>
       <div class="inline" style="margin-bottom:10px"><button class="btn small sec" id="eqPrev">‹</button><b id="eqSemaine"></b><button class="btn small sec" id="eqNext">›</button><button class="btn small sec" id="eqCopie">Copier la semaine précédente</button></div>
@@ -1710,13 +1712,16 @@ var PERTES_AUTO={sem:0,mois:0};
 function majPertesAuto(C){ var sem=jour(lundiP()), m0=jour().slice(0,8)+'01', s2=0, m2=0;
   Object.keys(C.jours).forEach(function(j){ [C.jours[j].perteAuto||{},C.jours[j].manqueSoir||{}].forEach(function(pa){ Object.keys(pa).forEach(function(pid){ var v=(prixAchat(pid)||0)*pa[pid]; if(j>=sem) s2+=v; if(j>=m0) m2+=v; }); }); });
   var ch=Math.round(s2)!==Math.round(PERTES_AUTO.sem)||Math.round(m2)!==Math.round(PERTES_AUTO.mois); PERTES_AUTO={sem:s2,mois:m2}; if(ch&&$('skPertes')&&SMV) rendreMvts(); }
+function texteRepas(m){ var c=(SC_DIRECT&&SC_DIRECT.produits)?null:null, t=[]; (m.lignes||[]).forEach(function(l){ if(l.s==='simple'||l.s==='double') t.push(l.p+' '+l.s+((l.ex||[]).length?' + '+l.ex.join(', '):'')); else if(l.p==='frites') t.push(l.q+' frites'); else if(l.p==='boisson') t.push(l.q+' boisson'+(l.q>1?'s':'')); }); return t.join(' · '); }
+function coutRepas(m){ var R=reglesConso(), c=consoVente({type:'vente',id:m.__id||'r',lignes:m.lignes},R,PRIX.appris||{}); return valeurConso(c).v; }
 function rendreMvts(){
   var debutSem=jour(lundiP()), pertesSem=0, pertesMois=0, detail={}, m0=jour(new Date()).slice(0,8)+'01';
   var lignes=SMV.slice().reverse().filter(function(m){ return m.jour>=jour(new Date(Date.now()-30*864e5)); }).map(function(m){
     var val=0;
-    var txt=(m.lignes||[]).map(function(l){ var p=prodP(l.produit)||{nom:'?'}; val+=(prixAchat(l.produit)||0)*l.qte; return esc(p.nom)+' '+qFmt(l.qte,p.unite); }).join(', ');
+    var txt=m.type==='repas'?esc(m.nom||'')+' : '+esc(texteRepas(m)):(m.lignes||[]).map(function(l){ var p=prodP(l.produit)||{nom:'?'}; val+=(prixAchat(l.produit)||0)*l.qte; return esc(p.nom)+' '+qFmt(l.qte,p.unite); }).join(', ');
     if(m.type==='perte'){ if(m.jour>=debutSem) pertesSem+=val; if(m.jour>=m0) pertesMois+=val; var k=(m.motif||'')+' · '+txt; }
-    var tag=m.type==='reception'?'<span class="tag carte">Livraison</span>':m.type==='inventaire'?'<span class="tag">Inventaire</span>':m.type==='consommation'?'<span class="tag">Sortie du jour</span>':m.type==='annule_mvt'?'<span class="tag">Correction</span>':m.type==='reste_soir'?'<span class="tag">Reste du soir</span>':'<span class="tag ann">Perte</span>';
+    if(m.type==='repas') val=coutRepas(m);
+    var tag=m.type==='repas'?'<span class="tag dep">Repas équipe</span>':m.type==='reception'?'<span class="tag carte">Livraison</span>':m.type==='inventaire'?'<span class="tag">Inventaire</span>':m.type==='consommation'?'<span class="tag">Sortie du jour</span>':m.type==='annule_mvt'?'<span class="tag">Correction</span>':m.type==='reste_soir'?'<span class="tag">Reste du soir</span>':'<span class="tag ann">Perte</span>';
     var four=m.fournisseur&&m.fournisseur!=='autre'&&fourP(m.fournisseur)?' · '+esc(fourP(m.fournisseur).nom):'';
     return '<div class="row"><span class="t num">'+esc(m.jour.slice(5))+' '+esc(m.h||'')+'</span><span class="l">'+tag+four+' '+txt+(m.motif?' · '+esc(m.motif):'')+(m.note?' <span class="note">('+esc(m.note)+')</span>':'')+'</span><b class="num">'+(m.type==='perte'&&val?'−'+eur(val):'')+'</b></div>';
   });
@@ -1842,13 +1847,13 @@ function chronologieStock(evs,mvts,R,ratios){
   var ann={}; evs.forEach(function(x){ if(x.type==='annulation') ann[x.ref]=1; });
   var items=[];
   evs.forEach(function(x){ if(x.type==='vente'&&!ann[x.id]) items.push({ts:x.tsClient||0,jour:x.jour,t:'vente',x:x}); });
-  mvtsSansAnnules(mvts).forEach(function(m){ if(['consommation','inventaire','reception','perte','reste_soir'].indexOf(m.type)>=0) items.push({ts:m.tsClient||0,jour:m.jour,t:m.type,m:m}); });
+  mvtsSansAnnules(mvts).forEach(function(m){ if(['consommation','inventaire','reception','perte','reste_soir','repas'].indexOf(m.type)>=0) items.push({ts:m.tsClient||0,jour:m.jour,t:m.type,m:m}); });
   items.sort(function(a,b){ return a.ts-b.ts; });
   var suivi={};   // produit → instant où son suivi au comptoir commence
   // le suivi commence au début du jour de la première sortie (même si elle est notée le soir) : les ventes de ce jour-là comptent
   items.forEach(function(it){ if(it.t==='consommation'||it.t==='inventaire') (it.m.lignes||[]).forEach(function(l){ if(suivi[l.produit]==null) suivi[l.produit]=new Date(it.jour+'T00:00:00').getTime(); }); });
   var reserve={}, comptoir={}, jours={}, bilans=[], dejaInv={}, per={ca:0,conso:{},debut:null,decl:{},soir:{}}, jourCourant=null;
-  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},perdu:{},manque:{},ca:0,comptoirFin:{},debut:{},perteAuto:{},resteCompte:{},sansReste:{},consoReelle:{},estCpt:{},prevuSoir:{},compteSoir:{},ecartSoir:{},manqueSoir:{}}; }
+  function J(j){ return jours[j]=jours[j]||{sorti:{},conso:{},repas:{},perdu:{},manque:{},ca:0,comptoirFin:{},debut:{},perteAuto:{},resteCompte:{},sansReste:{},consoReelle:{},estCpt:{},prevuSoir:{},compteSoir:{},ecartSoir:{},manqueSoir:{}}; }
   // frites : on ne connaît pas les grammes par sandwich ; ce qui est utilisé = reporté + sorti − jeté − sacs restants comptés le soir
   // (si le reste du soir n'est pas noté, tout ce qui a été sorti compte comme utilisé)
   var fr=produitRegle('frites',R);
@@ -1872,6 +1877,8 @@ function chronologieStock(evs,mvts,R,ratios){
     if(it.jour!==jourCourant){ cloreJour(jourCourant); jourCourant=it.jour; var dd=J(it.jour); Object.keys(comptoir).forEach(function(pid){ if(comptoir[pid]>0.01) dd.debut[pid]=comptoir[pid]; }); }
     var d=J(it.jour); if(!per.debut) per.debut=it.jour;
     if(it.t==='vente'){ var c=consoVente(it.x,R,ratios); Object.keys(c).forEach(function(pid){ if(suivi[pid]!=null&&it.ts>=suivi[pid]){ comptoir[pid]=(comptoir[pid]||0)-c[pid]; d.estCpt[pid]=(d.estCpt[pid]||0)+c[pid]; } d.conso[pid]=(d.conso[pid]||0)+c[pid]; per.conso[pid]=(per.conso[pid]||0)+c[pid]; }); d.ca+=it.x.total; per.ca+=it.x.total; }
+    else if(it.t==='repas'){ // repas de l'équipe : sort du comptoir comme une vente, compté à part (pas dans le food cost des ventes)
+      var cr=consoVente({type:'vente',id:it.m.__id,lignes:it.m.lignes},R,ratios); Object.keys(cr).forEach(function(pid){ if(suivi[pid]!=null&&it.ts>=suivi[pid]){ comptoir[pid]=(comptoir[pid]||0)-cr[pid]; d.estCpt[pid]=(d.estCpt[pid]||0)+cr[pid]; } d.repas[pid]=(d.repas[pid]||0)+cr[pid]; per.repas=per.repas||{}; per.repas[pid]=(per.repas[pid]||0)+cr[pid]; }); }
     else (it.m.lignes||[]).forEach(function(l){ var pid=l.produit;
       if(it.t==='reception') reserve[pid]=(reserve[pid]||0)+l.qte;
       if(it.t==='perte'){ if(it.m.source==='comptoir'||(pid===bag&&!it.m.source)) comptoir[pid]=(comptoir[pid]||0)-l.qte; else reserve[pid]=(reserve[pid]||0)-l.qte; per.decl[pid]=(per.decl[pid]||0)+l.qte; d.perdu[pid]=(d.perdu[pid]||0)+l.qte; }
@@ -1939,6 +1946,7 @@ function majFoodCostDirect(evs){
   var vc=valeurConso(conso), caHT=ca/(1+(REGC.tvaVentes||6)/100), fc=caHT&&vc.v?vc.v*100/caHT:null;
   el.innerHTML=fc!=null?'<div class="big num" style="font-size:42px;font-weight:800;color:'+(fc<33?'var(--ok)':fc<=40?'var(--warn)':'var(--danger)')+'">'+Math.round(fc)+' %</div>'+
     '<div class="row"><span class="l">Matière consommée par les ventes</span><b class="num">'+eur(vc.v)+'</b></div><div class="row"><span class="l">CA HT du jour</span><b class="num">'+eur(caHT)+'</b></div>'+
+    (function(){ var rp=(SD.mvtsJour||[]).filter(function(m){ return m.type==='repas'; }), ann={}; (SD.mvtsJour||[]).forEach(function(m){ if(m.type==='annule_mvt') ann[m.ref]=1; }); rp=rp.filter(function(m){ return !ann[m.__id]; }); if(!rp.length) return ''; var v=rp.reduce(function(t,m){ return t+coutRepas(m); },0); return '<div class="row"><span class="l note">Repas de l’équipe aujourd’hui ('+rp.length+') · hors food cost des ventes</span><b class="num">'+eur(v)+'</b></div>'; })()+
     '<p class="note">Food cost théorique, mis à jour à chaque vente'+(vc.manque?' (certains prix d’achat manquent : voir Achats et coûts)':'')+(ratios.frites?'':' · frites pas encore comptées (moyenne en apprentissage)')+'. Le réel se calcule à chaque inventaire (onglet Stock).</p>'
     :'<div class="empty">'+(ca?'Prix d’achat manquants : complète-les dans Achats et coûts.':'Pas encore de vente aujourd’hui.')+'</div>';
 }
@@ -3044,6 +3052,16 @@ function chargerPersonnel(){
         return '<tr><td>'+esc(p.jour.slice(8,10)+'/'+p.jour.slice(5,7))+'</td><td><b>'+esc(p.nom)+'</b></td><td class="note">'+(p.src==='caisse'?'sortie de caisse':'dépense')+' · '+esc(p.txt)+'</td><td class="num">'+eur(p.montant)+'</td><td><select class="in" data-paiemois="'+esc(p.cle)+'" style="width:auto">'+opts.map(function(o){ return '<option value="'+o+'"'+(o===p.mois?' selected':'')+'>'+esc(nomMois(o))+'</option>'; }).join('')+'</select></td></tr>'; }).join('')+'</table></div><p class="note">Un salaire payé début de mois pour le mois d’avant : choisis le mois d’avant, il ne compte alors plus dans ce mois-ci.</p>'
       :'<div class="empty">Aucun paiement de personnel noté pour ce mois.</div>';
   }).catch(function(e){ el.innerHTML='<div class="err">Lecture impossible ('+(e.code||e.message)+')</div>'; });
+  // repas de l'équipe du mois (notés sur la tablette)
+  Promise.all([mvtsSnap(mois+'-01'),PRIX_CHARGE?null:chargerPrix(),cfgSnap('stock')]).then(function(r){
+    if(!SC||!SC.produits||!SC.produits.length){ var sc=r[2].exists?r[2].data():{produits:[]}; SC=sc; SC.produits=SC.produits||[]; SC.fournisseurs=SC.fournisseurs||[]; }
+    var ms=mvtsSansAnnules(r[0].docs.map(function(d){ var m=d.data(); m.__id=d.id; return m; })).filter(function(m){ return m.type==='repas'&&String(m.jour).slice(0,7)===mois; });
+    var par={}; ms.forEach(function(m){ var k=m.membre||m.nom; var x=par[k]=par[k]||{nom:m.nom||'?',repas:0,boissons:0,cout:0};
+      (m.lignes||[]).forEach(function(l){ if(l.s==='simple'||l.s==='double') x.repas+=l.q||1; if(l.p==='boisson') x.boissons+=l.q||1; }); x.cout+=coutRepas(m); });
+    var ks=Object.keys(par), tot=ks.reduce(function(t,k){ return t+par[k].cout; },0);
+    $('peRepas').innerHTML=ks.length?'<div class="scroll"><table class="table"><tr><th>Personne</th><th>Ce mois</th><th class="num">Coût matière</th></tr>'+ks.map(function(k){ var x=par[k]; return '<tr><td><b>'+esc(x.nom)+'</b></td><td>'+x.repas+' sandwich'+(x.repas>1?'s':'')+' · '+x.boissons+' boisson'+(x.boissons>1?'s':'')+'</td><td class="num">'+eur(x.cout)+'</td></tr>'; }).join('')+'<tr><td><b>Total</b></td><td></td><td class="num"><b>'+eur(tot)+'</b></td></tr></table></div><p class="note">Notés sur la tablette par le gérant (tuile « Repas de l’équipe »). Ils sortent du stock du comptoir comme une vente : ils ne comptent plus comme un manque au comptage du soir ni à l’inventaire.</p>'
+      :'<div class="empty">Aucun repas noté ce mois-ci (tablette → « Repas de l’équipe »).</div>';
+  }).catch(function(e){ $('peRepas').innerHTML='<div class="err">Lecture impossible ('+esc(e&&(e.code||e.message)||'?')+')</div>'; });
 }
 document.addEventListener('change',function(e){
   if(e.target&&e.target.id==='peMois'){ chargerPersonnel(); return; }

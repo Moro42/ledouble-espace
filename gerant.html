@@ -166,6 +166,7 @@ function accueil(){
     tile('livraison','Livraison','Photo de la facture ou saisie','','main')+
     tile('sorties','Sorties du jour','Ce qui sort de la réserve','','main')+
     tile('pointage','Pointage','Arrivée, pause, départ','')+
+    tile('repas','Repas de l’équipe','Ce que chacun a mangé et bu','')+
     tile('planning','Planning','Semaine de l’équipe, propositions','')+
     tile('stock','Stock','Niveaux, inventaire','')+
     tile('pertes','Pertes','Invendus, périmés, casse','')+
@@ -179,6 +180,7 @@ document.addEventListener('click',function(ev){
   if(g==='cloture') rappelSortiesPuisCloture();
   if(g==='accueil'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; accueil(); }
   if(g==='pointage'){ $('vue').onclick=null; $('vue').oninput=null; vuePointage(); }
+  if(g==='repas'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; vueRepas(); }
   if(g==='livraison'||g==='sorties'){ if(unsubPt){ unsubPt(); unsubPt=null; } $('vue').onclick=null; $('vue').oninput=null; }
   if(g==='livraison') vueLivraison();
   if(g==='sorties') vueSorties();
@@ -537,28 +539,45 @@ function vueFeuilleHeures(depuis){
     }
   };
 }
+var PT_BR={};   // heures en cours de saisie (gardées si l'écran se rafraîchit)
+function hFmtG(min){ min=Math.round(min||0); return Math.floor(min/60)+' h'+(min%60?' '+pad(min%60):''); }
+function jourPointe(id){
+  var ann={}; POINTAGES.forEach(function(p){ if(p.type==='annule') ann[p.ref]=1; });
+  var l=POINTAGES.filter(function(p){ return p.membre===id&&p.type!=='annule'&&!ann[p.__id]; }).sort(function(a,b){ return a.tsClient-b.tsClient; });
+  var arr=null, dep=null, pz=0, debP=null, min=0, deb=null;
+  l.forEach(function(p){ if(p.type==='arrivee'){ if(!arr) arr=p.h; if(deb==null) deb=p.tsClient; } if(p.type==='pause'){ debP=p.tsClient; if(deb!=null){ min+=(p.tsClient-deb)/60000; deb=null; } } if(p.type==='reprise'){ if(debP) pz+=Math.round((p.tsClient-debP)/60000); debP=null; deb=p.tsClient; } if(p.type==='depart'){ dep=p.h; if(deb!=null){ min+=(p.tsClient-deb)/60000; deb=null; } } });
+  return {arr:arr,dep:dep,pause:pz,min:min,liste:l};
+}
+// enregistre la journée d'une personne : les pointages existants sont annulés (jamais effacés), puis arrivée, pause et départ sont notés aux heures saisies
+function enregistrerJournee(membre,j,arr,dep,pz,deja,source){
+  function ts(min){ var d=new Date(j+'T00:00:00'); d.setMinutes(min); return d.getTime(); }
+  function hm(min){ return pad(Math.floor(min/60))+':'+pad(min%60); }
+  var a=minutes(arr), base={membre:membre,jour:j,par:GERANT,source:source}, bt=db.batch();
+  (deja||[]).forEach(function(p){ bt.set(db.collection('pointages').doc(),{type:'annule',ref:p.__id,jour:j,h:hhmm(),tsClient:Date.now(),par:GERANT,source:source}); });
+  bt.set(db.collection('pointages').doc(),Object.assign({type:'arrivee',h:hm(a),tsClient:ts(a)},base));
+  if(dep){ var d=minutes(dep);
+    if(pz){ var mi=a+Math.round((d-a-pz)/2); bt.set(db.collection('pointages').doc(),Object.assign({type:'pause',h:hm(mi),tsClient:ts(mi)},base)); bt.set(db.collection('pointages').doc(),Object.assign({type:'reprise',h:hm(mi+pz),tsClient:ts(mi+pz)},base)); }
+    bt.set(db.collection('pointages').doc(),Object.assign({type:'depart',h:hm(d),tsClient:ts(d)},base)); }
+  return bt.commit();
+}
 function rendrePointage(){
   if(!document.getElementById('ptListe')){
-    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Appuie sur Arrivée, Pause ou Départ pour chaque employé : l’heure est notée tout de suite (le propriétaire la voit dans ses heures).</p><div id="ptRattrapage"></div><div class="card" id="ptListe"></div><div id="ptAutres"></div><button class="btn sec" id="ptFeuille" style="margin-top:14px;border:1.5px dashed var(--line);background:transparent">📝 Recopier une feuille d’heures (jours passés)</button>';
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Pointage</h2><p class="sub">Note l’heure d’arrivée et de départ de chacun (⏱ = maintenant), puis « Enregistrer ». Pour corriger, change l’heure et enregistre à nouveau.</p><div id="ptRattrapage"></div><div class="card" id="ptListe"></div><div id="ptAutres"></div><button class="btn sec" id="ptFeuille" style="margin-top:14px;border:1.5px dashed var(--line);background:transparent">📝 Recopier une feuille d’heures (jours passés)</button>';
   }  if(!rendrePointage._r){ rendrePointage._r=1; afficherRattrapage(); }
 
   var auj=creneauxDuJour(jour()), prevus={}, h='';
   auj.forEach(function(c){ (prevus[c.membre]=prevus[c.membre]||[]).push(c); });
   function ligne(m){
-    var e=etatPersonne(m.id), cr=prevus[m.id]||[], debut=cr.length?cr.map(function(c){return c.debut}).sort()[0]:null;
-    var info='', boutons='';
-    if(e.etat==='absent') info=debut?'Prévu à '+debut:'Pas prévu aujourd’hui';
-    else if(e.etat==='present'){ var ret=debut?minutes(e.arrivee)-minutes(debut):0; info='Arrivé à '+e.arrivee+(debut?' · prévu '+debut:'')+(ret>5?' <span style="color:var(--warn)">(+'+ret+' min)</span>':''); }
-    else if(e.etat==='pause') info='En pause depuis '+e.depuis;
-    else info='Parti à '+e.depuis;
-    if(e.etat==='absent') boutons='<button class="pt-btn ok" data-pt="arrivee" data-m="'+m.id+'">Arrivée</button>';
-    if(e.etat==='present') boutons='<button class="pt-btn" data-pt="pause" data-m="'+m.id+'">Pause</button><button class="pt-btn ko" data-pt="depart" data-m="'+m.id+'">Départ</button>';
-    if(e.etat==='pause') boutons='<button class="pt-btn ok" data-pt="reprise" data-m="'+m.id+'">Reprise</button>';
-    if(e.etat==='parti') boutons='<button class="pt-btn" data-pt="arrivee" data-m="'+m.id+'">Revenir</button>';
-    var annul='';
-    if(e.dernier && e.dernier.par!=='badge' && Date.now()-e.dernier.tsClient<5*60000) annul='<button class="pt-annul" data-annule="'+e.dernier.__id+'">Annuler le dernier pointage ('+e.dernier.h+')</button>';
-    var viaBadge=e.dernier&&e.dernier.par==='badge';
-    return '<div class="pt-ligne"><div><b>'+esc(m.nom)+'</b>'+(viaBadge?' <span class="sub" style="font-size:13px">· badge</span>':'')+(m.role==='gerant'?' <span class="sub">(gérant)</span>':'')+'<div class="sub" style="margin:2px 0 0">'+info+'</div>'+annul+'</div><div class="pt-actions">'+boutons+'</div></div>';
+    var j=jourPointe(m.id), cr=prevus[m.id]||[], debut=cr.length?cr.map(function(c){return c.debut}).sort()[0]:null, fin=cr.length?cr.map(function(c){return c.fin}).sort().pop():null;
+    var br=PT_BR[m.id]||{}, va=br.a!=null?br.a:(j.arr||''), vd=br.d!=null?br.d:(j.dep||''), vp=br.p!=null?br.p:(j.pause?String(j.pause):'');
+    var etat=j.arr?(j.dep?'✓ Arrivé à '+j.arr+' · parti à '+j.dep+' · '+hFmtG(j.min):'✓ Arrivé à '+j.arr+' · pas encore parti'):'';
+    var ret=(j.arr&&debut)?minutes(j.arr)-minutes(debut):0;
+    function champ(k,v,lib){ return '<label class="f" style="margin:0">'+lib+'<div style="display:flex;gap:6px;margin-top:4px"><input class="sel" type="time" data-ph="'+k+'|'+m.id+'" value="'+esc(v)+'" style="font-size:20px;font-weight:700;text-align:center;flex:1"><button class="btn sec" data-pnow="'+k+'|'+m.id+'" style="width:auto;padding:0 12px" aria-label="Maintenant">⏱</button></div></label>'; }
+    return '<div class="pt-ligne" style="display:block"><div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:19px">'+esc(m.nom)+'</b><span class="sub" style="margin:0">'+(debut?'prévu '+debut+(fin?' – '+fin:''):'pas prévu aujourd’hui')+'</span></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">'+champ('a',va,'Arrivée')+champ('d',vd,'Départ')+'</div>'+
+      '<details style="margin-top:6px"'+(vp&&vp!=='0'?' open':'')+'><summary class="sub" style="margin:0;cursor:pointer">Pause (minutes, facultatif)</summary><input class="sel" inputmode="numeric" data-ph="p|'+m.id+'" value="'+esc(vp)+'" placeholder="0" style="margin-top:6px;max-width:140px"></details>'+
+      '<button class="btn prim" data-pok="'+m.id+'" style="margin-top:10px">Enregistrer</button>'+
+      (etat?'<div class="sub" style="margin:6px 0 0;color:var(--ok)">'+etat+(ret>5?' <span style="color:var(--warn)">(+'+ret+' min)</span>':'')+'</div>':'')+'</div>';
   }
   var employes=MEMBRES.filter(function(m){ return m.role!=='proprietaire'&&m.role!=='gerant'&&m.pointe!==false; });   // employés seulement
   var planifies=employes.filter(function(m){ return prevus[m.id] || etatPersonne(m.id).etat!=='absent'; });
@@ -568,6 +587,20 @@ function rendrePointage(){
 }
 document.addEventListener('click',function(ev){
   if(ev.target.closest('#ptFeuille')||ev.target.closest('#ptRattraper')){ if(unsubPt){ unsubPt(); unsubPt=null; } vueFeuilleHeures(ev.target.closest('#ptRattraper')?RATTRAPAGE.du:null); return; }
+  var bn=ev.target.closest('[data-pnow]');
+  if(bn){ var k=bn.getAttribute('data-pnow'), inp=document.querySelector('[data-ph="'+k+'"]'); if(inp){ inp.value=hhmm(); var x=k.split('|'); PT_BR[x[1]]=PT_BR[x[1]]||{}; PT_BR[x[1]][x[0]]=inp.value; } return; }
+  var bo=ev.target.closest('[data-pok]');
+  if(bo){ var id=bo.getAttribute('data-pok'), g=function(k){ var e=document.querySelector('[data-ph="'+k+'|'+id+'"]'); return e?String(e.value).trim():''; };
+    var arr=g('a'), dep=g('d'), pz=parseInt(g('p'),10)||0;
+    if(!arr){ alert('Indique au moins l’heure d’arrivée.'); return; }
+    if(dep&&!(minutes(dep)>minutes(arr))){ alert('L’heure de départ doit être après l’arrivée.'); return; }
+    if(dep&&pz>=minutes(dep)-minutes(arr)){ alert('La pause est trop longue.'); return; }
+    var jp=jourPointe(id); if(jp.arr===arr&&(jp.dep||'')===dep&&jp.pause===pz){ toast('Rien n’a changé'); return; }
+    bo.disabled=true;
+    enregistrerJournee(id,jour(),arr,dep,pz,jp.liste.filter(function(p){ return p.par!=='badge'; }),'tablette')
+      .then(function(){ delete PT_BR[id]; bo.disabled=false; toast(nomMembre(id)+' : '+arr+(dep?' – '+dep:'')+' enregistré'); })
+      .catch(function(e){ bo.disabled=false; alert('Enregistrement impossible ('+(e.code||e.message)+'). Vérifie la connexion internet.'); });
+    return; }
   var b=ev.target.closest('[data-pt],[data-annule]'); if(!b) return;
   if(b.hasAttribute('data-annule')){
     db.collection('pointages').add({type:'annule',ref:b.getAttribute('data-annule'),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT}).then(function(){ toast('Pointage annulé'); });
@@ -580,6 +613,53 @@ document.addEventListener('click',function(ev){
     .catch(function(e){ b.disabled=false; alert('Pointage impossible ('+e.code+'). Vérifie la connexion internet.'); });
 });
 
+document.addEventListener('input',function(ev){ var k=ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-ph'); if(!k) return; var x=k.split('|'); PT_BR[x[1]]=PT_BR[x[1]]||{}; PT_BR[x[1]][x[0]]=ev.target.value; });
+/* ---------- repas de l'équipe : ce que chacun mange et boit (sans prix) ; sort du stock du comptoir côté propriétaire ---------- */
+function vueRepas(){
+  var carte=null, gens=[], st={m:null,p:null,s:'double',fr:0,bo:0,ex:{}}, REPAS=[];
+  function charger(){ return Promise.all([db.collection('config').doc('carte').get(),db.collection('config').doc('equipe').get(),db.collection('stock_mvts').where('jour','==',jour()).get()]).then(function(r){
+    carte=r[0].exists?r[0].data():{produits:[],extras:[]};
+    gens=(r[1].exists&&r[1].data().membres||[]).filter(function(m){ return m.actif!==false&&m.role!=='proprietaire'&&m.pointe!==false; });
+    var ann={}; r[2].docs.forEach(function(d){ var x=d.data(); if(x.type==='annule_mvt') ann[x.ref]=1; });
+    REPAS=r[2].docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }).filter(function(o){ return o.type==='repas'&&!ann[o.__id]; }).sort(function(a,b){ return a.tsClient-b.tsClient; });
+    if(!st.m&&gens.length) st.m=gens[0].id; }); }
+  function prods(){ return (carte.produits||[]).filter(function(p){ return p.actif!==false&&p.prix&&(p.prix.double!=null||p.prix.simple!=null); }); }
+  function nomP(id){ var p=(carte.produits||[]).filter(function(x){return x.id===id})[0]; return p?p.nom:id; }
+  function texte(r){ var t=[]; (r.lignes||[]).forEach(function(l){ if(l.s==='simple'||l.s==='double') t.push(nomP(l.p)+' '+l.s+((l.ex||[]).length?' + '+l.ex.join(', '):'')); else if(l.p==='frites') t.push(l.q+' frites'); else if(l.p==='boisson') t.push(l.q+' boisson'+(l.q>1?'s':'')); }); return t.join(' · ')||'—'; }
+  function pas(k,v,lib){ return '<div class="pt-ligne" style="padding:8px 0"><span>'+lib+'</span><div class="step" style="max-width:190px"><button data-rm="'+k+'">−</button><input inputmode="numeric" data-rq="'+k+'" value="'+v+'"><button data-rp="'+k+'">+</button></div></div>'; }
+  function render(){
+    var ex=(carte.extras||[]).filter(function(e){ return e.actif!==false; }), qui=gens.filter(function(m){return m.id===st.m})[0];
+    $('vue').innerHTML='<button class="back" data-go="accueil">‹ Accueil</button><h2>Repas de l’équipe</h2><p class="sub">Note ce que chacun a mangé et bu aujourd’hui. Ça sort du stock du comptoir, comme une vente.</p>'+
+      '<div class="card"><p class="sub" style="margin:0">Qui ?</p><div class="chips">'+gens.map(function(m){ return '<button class="chip'+(st.m===m.id?' on':'')+'" data-rmb="'+m.id+'">'+esc(m.nom)+'</button>'; }).join('')+'</div>'+
+      '<p class="sub" style="margin:12px 0 0">Sandwich (facultatif)</p><div class="chips">'+prods().map(function(p){ return '<button class="chip'+(st.p===p.id?' on':'')+'" data-rpr="'+p.id+'">'+esc(p.nom)+'</button>'; }).join('')+'<button class="chip'+(!st.p?' on':'')+'" data-rpr="">Pas de sandwich</button></div>'+
+      (st.p?'<div class="chips">'+['simple','double'].filter(function(t){ var p=prods().filter(function(x){return x.id===st.p})[0]; return p&&p.prix[t]!=null; }).map(function(t){ return '<button class="chip'+(st.s===t?' on':'')+'" data-rsz="'+t+'">'+t+'</button>'; }).join('')+'</div>'+
+        (ex.length?'<p class="sub" style="margin:8px 0 0">Extras</p><div class="chips">'+ex.map(function(e){ return '<button class="chip'+(st.ex[e.id]?' on':'')+'" data-rex="'+e.id+'">'+esc(e.nom)+'</button>'; }).join('')+'</div>':''):'')+
+      pas('fr',st.fr,'Portions de frites')+pas('bo',st.bo,'Boissons (canettes)')+
+      '<button class="btn prim" id="rpOk" style="margin-top:12px" '+(st.m?'':'disabled')+'>Noter le repas'+(qui?' de '+esc(qui.nom):'')+'</button></div>'+
+      '<h3 style="margin:22px 0 8px">Aujourd’hui</h3><div class="card">'+(REPAS.length?REPAS.map(function(r){ return '<div class="pt-ligne"><span>'+esc(r.h)+' · <b>'+esc(r.nom||'')+'</b> · '+esc(texte(r))+'</span><button class="btn sec" style="width:auto;padding:8px 14px" data-rcorr="'+r.__id+'">Annuler</button></div>'; }).join(''):'<p class="sub" style="margin:0">Aucun repas noté aujourd’hui.</p>')+'</div>';
+  }
+  function lireQ(){ ['fr','bo'].forEach(function(k){ var e=document.querySelector('[data-rq="'+k+'"]'); if(e) st[k]=Math.max(0,parseInt(e.value,10)||0); }); }
+  $('vue').innerHTML='<div class="card"><p class="sub" style="margin:0">Chargement…</p></div>';
+  charger().then(render).catch(function(e){ $('vue').innerHTML='<div class="card"><div class="err">Lecture impossible ('+(e.code||e.message)+')</div></div>'; });
+  $('vue').onclick=function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    if(b.hasAttribute('data-rmb')){ lireQ(); st.m=b.getAttribute('data-rmb'); render(); return; }
+    if(b.hasAttribute('data-rpr')){ lireQ(); st.p=b.getAttribute('data-rpr')||null; st.ex={}; var p=prods().filter(function(x){return x.id===st.p})[0]; if(p&&p.prix[st.s]==null) st.s=p.prix.double!=null?'double':'simple'; render(); return; }
+    if(b.hasAttribute('data-rsz')){ lireQ(); st.s=b.getAttribute('data-rsz'); render(); return; }
+    if(b.hasAttribute('data-rex')){ lireQ(); var k=b.getAttribute('data-rex'); st.ex[k]=!st.ex[k]; render(); return; }
+    var m=b.getAttribute('data-rm'), pl=b.getAttribute('data-rp');
+    if(m||pl){ var inp=document.querySelector('[data-rq="'+(m||pl)+'"]'); inp.value=Math.max(0,(parseInt(inp.value,10)||0)+(pl?1:-1)); lireQ(); return; }
+    if(b.hasAttribute('data-rcorr')){ if(!confirm('Annuler ce repas ?')) return; db.collection('stock_mvts').add({type:'annule_mvt',ref:b.getAttribute('data-rcorr'),jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT}).then(function(){ toast('Repas annulé'); return charger(); }).then(render); return; }
+    if(b.id==='rpOk'){ lireQ();
+      var lignes=[]; if(st.p) lignes.push({p:st.p,s:st.s,q:1,ex:Object.keys(st.ex).filter(function(k){return st.ex[k];})});
+      if(st.fr) lignes.push({p:'frites',s:'option',q:st.fr,fr:1}); if(st.bo) lignes.push({p:'boisson',s:'seule',q:st.bo});
+      if(!lignes.length){ alert('Choisis un sandwich, des frites ou une boisson.'); return; }
+      var qui=gens.filter(function(x){return x.id===st.m})[0]; b.disabled=true;
+      db.collection('stock_mvts').add({type:'repas',membre:st.m,nom:qui?qui.nom:'',lignes:lignes,jour:jour(),h:hhmm(),tsClient:Date.now(),par:GERANT})
+        .then(function(){ toast('Repas noté'); st.p=null; st.fr=0; st.bo=0; st.ex={}; return charger(); }).then(render)
+        .catch(function(e){ b.disabled=false; alert('Enregistrement impossible ('+(e.code||e.message)+')'); }); }
+  };
+}
 /* ---------- planning (consultation + propositions) ---------- */
 var semaineVue=null;
 function vuePlanning(decalage){
