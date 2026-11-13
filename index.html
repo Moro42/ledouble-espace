@@ -865,14 +865,14 @@ function rendreAudit(P,R,Rp,cur,prev,clos,pts,mvts,membres,pv,prixP,noms,cible){
     var m=k.split('|')[0], j=k.split('|')[1], iv=intervallesListe(selonPause(parMJ[k],pv[m]),j<jour()), tot=0;
     iv.forEach(function(x){ tot+=(x[1]-x[0])/60000; });
     var aj=intervalles(parMJ[k],j<jour()); if(aj.manque && dans(j,P.du,P.au)) manques++;
-    if(dans(j,P.du,P.au)){ minM[m]=(minM[m]||0)+tot; coutJM[m]=(coutJM[m]||0)+coutMinutes(tot,pv[m]);
+    if(dans(j,P.du,P.au)){ minM[m]=(minM[m]||0)+tot; coutJM[m]=(coutJM[m]||0)+coutMinutes(tot,pv[m],j);
       for(var h=6;h<24;h++){ var d0=new Date(j+'T00:00:00'); d0.setHours(h); var a=d0.getTime(), b=a+3600e3, s=0;
         iv.forEach(function(x){ s+=Math.max(0,Math.min(b,x[1])-Math.max(a,x[0])); }); if(s>=1800e3){ var kk=j+'|'+h; presence[kk]=(presence[kk]||0)+1; } }
-    } else { minMp[m]=(minMp[m]||0)+tot; coutJMp[m]=(coutJMp[m]||0)+coutMinutes(tot,pv[m]); }
+    } else { minMp[m]=(minMp[m]||0)+tot; coutJMp[m]=(coutJMp[m]||0)+coutMinutes(tot,pv[m],j); }
   });
   var cout=0, coutP=0;
   Object.keys(pv).forEach(function(id){ var x=pv[id]; if(!x||!x.office) return; var mn=(x.heuresDecl||0)*60;
-    var jv=Object.keys(R.jours||{}), jvp=Object.keys(Rp.jours||{}); minM[id]=jv.length*mn; coutJM[id]=jv.length*coutMinutes(mn,x); minMp[id]=jvp.length*mn; coutJMp[id]=jvp.length*coutMinutes(mn,x); });
+    var jv=Object.keys(R.jours||{}), jvp=Object.keys(Rp.jours||{}); minM[id]=jv.length*mn; coutJM[id]=jv.reduce(function(t,d){ return t+coutMinutes(mn,x,d); },0); minMp[id]=jvp.length*mn; coutJMp[id]=jvp.reduce(function(t,d){ return t+coutMinutes(mn,x,d); },0); });
   Object.keys(coutJM).forEach(function(m){ cout+=coutJM[m]; });
   Object.keys(coutJMp).forEach(function(m){ coutP+=coutJMp[m]; });
   var heuresTot=Object.keys(minM).reduce(function(s,m){return s+minM[m]},0)/60;
@@ -1443,7 +1443,7 @@ function initEquipe(){
   Promise.all([cfgSnap('equipe'),cfgSnap('equipe_prive'),chargerBadges()]).then(function(r){
     EQ=r[0].exists?r[0].data():{membres:[]}; EQ.membres=EQ.membres||[];
     var pv=r[1].exists?(r[1].data().membres||{}):{};
-    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement','palierH','palierTarif','pausePayee','fixeJour','office','heuresDecl','mensuel'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
+    EQ.membres.forEach(function(m){ var x=pv[m.id]||{}; ['contrat','heuresSemaine','coutHoraire','soldeDepart','paiement','palierH','palierTarif','pausePayee','fixeJour','office','heuresDecl','mensuel','tarifs'].forEach(function(k){ if(x[k]!==undefined) m[k]=x[k]; }); });
   }).catch(function(){}).then(function(){
     rendreMembres(); semP=lundiP(); chargerPlanningP(); chargerPropositions(); chargerHeures('semaine');
   });
@@ -1455,7 +1455,7 @@ function rendreMembres(quotas){
   $('eqMembres').innerHTML=(EQ.membres.length?EQ.membres.map(function(m,i){
     var q='';
     if(m.role==='etudiant'){ var u=(m.soldeDepart||0)*60+(quotas[m.id]||0); q=' · <b class="num" style="color:'+(u>600*60?'var(--danger)':u>500*60?'var(--warn)':'var(--ink)')+'">'+Math.round(u/60)+' h utilisées sur 650</b>'; }
-    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.palierH&&m.palierTarif?' · '+String(m.palierH).replace('.',',')+' premières h à '+eur(m.palierTarif)+'/h puis '+eur(m.coutHoraire)+'/h':(m.coutHoraire?' · '+eur(m.coutHoraire)+'/h':''))+(m.pausePayee?' · pause payée':'')+(m.fixeJour?' · + '+eur(m.fixeJour)+'/jour en espèces':'')+(m.office?' · présent d’office ('+String(m.heuresDecl||0).replace('.',',')+' h déclarées/jour)':'')+(m.mensuel?' · '+eur(m.mensuel)+' par mois':'')+(m.pointe===false?' · ne pointe pas':'')+q+'</span>'+ligneBadge(m)+'</span><span class="inline">'+(m.actif!==false&&badgeDe(m.id)?'<button class="btn small sec" data-badgex="'+esc(m.id)+'">Retirer le badge</button>':'')+'<button class="btn small sec" data-editm="'+i+'">Modifier</button></span></div>';
+    return '<div class="row"><span class="l"><b>'+esc(m.nom)+'</b>'+(m.actif===false?' <span class="tag">inactif</span>':'')+'<br><span class="note">'+(ROLES[m.role]||m.role)+(m.contrat?' · '+esc(m.contrat):'')+(m.heuresSemaine?' · '+m.heuresSemaine+' h/sem':'')+(m.palierH&&m.palierTarif?' · '+String(m.palierH).replace('.',',')+' premières h à '+eur(m.palierTarif)+'/h puis '+eur(m.coutHoraire)+'/h':(tarifJour(m,jour())?' · '+eur(tarifJour(m,jour()))+'/h'+((m.tarifs||[]).length?' (depuis le '+String(m.tarifs.slice().sort(function(a,b){return String(a.depuis).localeCompare(String(b.depuis));}).pop().depuis).slice(8,10)+'/'+String(m.tarifs.slice().sort(function(a,b){return String(a.depuis).localeCompare(String(b.depuis));}).pop().depuis).slice(5,7)+', avant '+eur(m.coutHoraire)+')':''):''))+(m.pausePayee?' · pause payée':'')+(m.fixeJour?' · + '+eur(m.fixeJour)+'/jour en espèces':'')+(m.office?' · présent d’office ('+String(m.heuresDecl||0).replace('.',',')+' h déclarées/jour)':'')+(m.mensuel?' · '+eur(m.mensuel)+' par mois':'')+(m.pointe===false?' · ne pointe pas':'')+q+'</span>'+ligneBadge(m)+'</span><span class="inline">'+(m.actif!==false&&badgeDe(m.id)?'<button class="btn small sec" data-badgex="'+esc(m.id)+'">Retirer le badge</button>':'')+'<button class="btn small sec" data-editm="'+i+'">Modifier</button></span></div>';
   }).join(''):'<div class="empty">Aucune personne pour l’instant.</div>');
 }
 function editerMembre(i){
@@ -1465,7 +1465,7 @@ function editerMembre(i){
     '<div class="inline"><label class="f" style="flex:1">Nom<input class="in" id="emNom" value="'+esc(m.nom)+'"></label>'+
     '<label class="f">Fonction<select class="in" id="emRole"><option value="proprietaire" '+(m.role==='proprietaire'?'selected':'')+'>Propriétaire</option><option value="gerant" '+(m.role==='gerant'?'selected':'')+'>Gérant</option><option value="etudiant" '+(m.role==='etudiant'?'selected':'')+'>Étudiant</option><option value="employe" '+(m.role==='employe'?'selected':'')+'>Employé</option></select></label></div>'+
     '<div class="inline"><label class="f">Contrat<input class="in" id="emContrat" value="'+esc(m.contrat||'')+'" placeholder="CDI, CDD, étudiant…"></label><label class="f">Heures / semaine<input class="in px" id="emH" inputmode="numeric" value="'+esc(m.heuresSemaine||'')+'"></label>'+
-    '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(m.coutHoraire)+'"></label>'+
+    '<label class="f">Coût horaire employeur €<input class="in px" id="emCout" inputmode="decimal" value="'+vEur(tarifJour(m,jour()))+'"></label>'+
     '<label class="f">Payé<select class="in" id="emPaie"><option value="">— à préciser —</option><option value="especes" '+(m.paiement==='especes'?'selected':'')+'>en espèces</option><option value="virement" '+(m.paiement==='virement'?'selected':'')+'>par virement</option></select></label></div>'+
     '<div class="inline"><label class="f">Palier : les … premières heures du jour<input class="in px" id="emPH" inputmode="decimal" value="'+(m.palierH?String(m.palierH).replace('.',','):'')+'" placeholder="ex. 3"></label><label class="f">payées €/h<input class="in px" id="emPT" inputmode="decimal" value="'+(m.palierTarif?vEur(m.palierTarif):'')+'" placeholder="ex. 13"></label><label class="switch" style="align-self:end"><input type="checkbox" id="emPause" '+(m.pausePayee?'checked':'')+'>Pause payée</label><label class="f">En plus, par jour travaillé (espèces) €<input class="in px" id="emFixe" inputmode="decimal" value="'+(m.fixeJour?vEur(m.fixeJour):'')+'" placeholder="ex. 60"></label></div>'+
     '<div class="inline"><label class="f">Salaire fixe par mois €<input class="in px" id="emMens" inputmode="decimal" value="'+(m.mensuel?vEur(m.mensuel):'')+'" placeholder="ex. 500"></label><label class="switch" style="align-self:end"><input type="checkbox" id="emPointe" '+(m.pointe!==false?'checked':'')+'>Pointe sur la tablette</label></div>'+
@@ -1478,10 +1478,13 @@ function editerMembre(i){
   $('emNon').onclick=function(){ f.className='hidden'; };
   $('emOk').onclick=function(){
     m.nom=$('emNom').value.trim(); if(!m.nom){ alert('Le nom est obligatoire.'); return; }
-    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; m.coutHoraire=cents($('emCout').value)||0; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.paiement=$('emPaie').value; m.actif=$('emActif').checked; m.palierH=parseFloat(String($('emPH').value).replace(',','.'))||0; m.palierTarif=cents($('emPT').value)||0; m.pausePayee=$('emPause').checked; m.fixeJour=cents($('emFixe').value)||0; m.office=$('emOffice').checked; m.mensuel=cents($('emMens').value)||0; m.pointe=$('emPointe').checked; m.heuresDecl=parseFloat(String($('emHD').value).replace(',','.'))||0;
+    m.role=$('emRole').value; m.contrat=$('emContrat').value.trim(); m.heuresSemaine=parseFloat($('emH').value)||0; var nvT=cents($('emCout').value)||0, acT=tarifJour(m,jour());
+    if(i!=null&&nvT!==acT){ var dEff=prompt('Nouveau tarif '+eur(nvT)+'/h (avant '+eur(acT)+'/h). À partir de quel jour ? (AAAA-MM-JJ)\nLes heures d’avant gardent l’ancien tarif.',jour()); if(dEff==null) return; dEff=String(dEff).trim(); if(!/^\d{4}-\d{2}-\d{2}$/.test(dEff)){ alert('Date invalide (exemple : '+jour()+').'); return; }
+      m.tarifs=(m.tarifs||[]).filter(function(r){ return r.depuis!==dEff; }).concat([{depuis:dEff,coutHoraire:nvT}]); }
+    else if(i==null) m.coutHoraire=nvT; m.soldeDepart=parseInt($('emSolde').value,10)||0; m.paiement=$('emPaie').value; m.actif=$('emActif').checked; m.palierH=parseFloat(String($('emPH').value).replace(',','.'))||0; m.palierTarif=cents($('emPT').value)||0; m.pausePayee=$('emPause').checked; m.fixeJour=cents($('emFixe').value)||0; m.office=$('emOffice').checked; m.mensuel=cents($('emMens').value)||0; m.pointe=$('emPointe').checked; m.heuresDecl=parseFloat(String($('emHD').value).replace(',','.'))||0;
     if(i==null) EQ.membres.push(m); else EQ.membres[i]=m;
     var pub=EQ.membres.map(function(x){ var o={id:x.id,nom:x.nom,role:x.role,actif:x.actif!==false}; if(x.pointe===false) o.pointe=false; return o; });
-    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||'',palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0,mensuel:x.mensuel||0}; });
+    var prive={}; EQ.membres.forEach(function(x){ prive[x.id]={contrat:x.contrat||'',heuresSemaine:x.heuresSemaine||0,coutHoraire:x.coutHoraire||0,soldeDepart:x.soldeDepart||0,paiement:x.paiement||'',palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0,mensuel:x.mensuel||0,tarifs:x.tarifs||[]}; });
     Promise.all([db.collection('config').doc('equipe').set({membres:pub,maj:Date.now()}),db.collection('config').doc('equipe_prive').set({membres:prive,maj:Date.now()},{mergeFields:['membres','maj']})]).then(function(){ toast('Équipe enregistrée'); f.className='hidden'; synchroBadgesCaisse().catch(function(){}); rendreMembres(); rendrePlanningP(); }).catch(function(e){ alert('Enregistrement impossible ('+e.code+')'); });
   };
   f.scrollIntoView({behavior:'smooth'});
@@ -1553,7 +1556,9 @@ function traiterProposition(id,accepter){
 }
 /* ----- heures prestées ----- */
 // coût d'une journée (en centimes) : palier éventuel (les X premières heures du jour à un tarif, puis le coût horaire)
-function coutMinutes(min,x){ x=x||{}; var h=(min||0)/60, t=x.coutHoraire||0, ph=parseFloat(x.palierH)||0, pt=x.palierTarif||0;
+// tarif applicable un jour donné : x.tarifs = [{depuis:'AAAA-MM-JJ', coutHoraire}] (le plus récent dont la date est passée l'emporte)
+function tarifJour(x,j){ x=x||{}; if(!j||!x.tarifs||!x.tarifs.length) return x.coutHoraire||0; var t=x.coutHoraire||0; x.tarifs.slice().sort(function(a,b){ return String(a.depuis).localeCompare(String(b.depuis)); }).forEach(function(r){ if(String(r.depuis)<=j) t=r.coutHoraire; }); return t; }
+function coutMinutes(min,x,j){ x=x||{}; var h=(min||0)/60, t=tarifJour(x,j), ph=parseFloat(x.palierH)||0, pt=x.palierTarif||0;
   var fixe=(min>0&&x.fixeJour)?x.fixeJour:0;   // supplément fixe par jour travaillé (ex. 60 € en espèces)
   if(ph>0&&pt>0) return Math.min(h,ph)*pt+Math.max(0,h-ph)*t+fixe; return h*t+fixe; }
 // présent d'office (ex. Mattheo, sans pointage) : compté chaque jour d'ouverture pour ses heures déclarées + son supplément
@@ -1598,7 +1603,7 @@ function chargerHeures(per){
       var m=k.split('|')[0], j=k.split('|')[1], mb=EQ.membres.filter(function(x){return x.id===m})[0], r=intervalles(selonPause(parMJ[k],mb), j<jour());
       quotas[m]=(quotas[m]||0)+r.min;
       if(j>=du && j<=au){
-        presteP[m]=(presteP[m]||0)+r.min; coutP_M[m]=(coutP_M[m]||0)+coutMinutes(r.min,mb);
+        presteP[m]=(presteP[m]||0)+r.min; coutP_M[m]=(coutP_M[m]||0)+coutMinutes(r.min,mb,j);
         if(r.manque) manques[m]=(manques[m]||0)+1;
         var lu=jour(lundiP(new Date(j+'T12:00:00')));
         var cr=(PL_P[lu]||[]).filter(function(c){return c.membre===m&&c.jour===j}).sort(function(a,b){return minu(a.debut)-minu(b.debut)});
@@ -1612,7 +1617,7 @@ function chargerHeures(per){
       var ca=0; res[1].docs.forEach(function(d){ var x=d.data(); if(x.type==='vente') ca+=x.total; if(x.type==='annulation') ca-=x.montant||0; });
       var cout=0, lignes='';
       var jv=joursDeVente(res[1].docs.map(function(d){ return d.data(); })).filter(function(j){ return j>=du&&j<=au; });
-      EQ.membres.forEach(function(m){ if(!m.office||m.actif===false) return; var mn=(m.heuresDecl||0)*60; presteP[m.id]=jv.length*mn; coutP_M[m.id]=jv.length*coutMinutes(mn,m); });
+      EQ.membres.forEach(function(m){ if(!m.office||m.actif===false) return; var mn=(m.heuresDecl||0)*60; presteP[m.id]=jv.length*mn; coutP_M[m.id]=jv.reduce(function(t,d){ return t+coutMinutes(mn,m,d); },0); });
       var ids=EQ.membres.map(function(m){return m.id});
       ids.forEach(function(id){
         var m=EQ.membres.filter(function(x){return x.id===id})[0];
@@ -3086,7 +3091,7 @@ function membreDuTexte(t,membres){ var n=' '+norm(t)+' '; for(var i=0;i<membres.
 function argentDuMois(o){
   var N={}; NATURES.forEach(function(x){ N[x.k]={total:0,lignes:[]}; });
   function ajoute(k,l){ N[k].total+=l.montant; N[k].lignes.push(l); }
-  var membres=o.membres.map(function(m){ var x=o.prive[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif!==false,paiement:x.paiement||'',coutHoraire:x.coutHoraire||0,palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0,mensuel:x.mensuel||0}; });
+  var membres=o.membres.map(function(m){ var x=o.prive[m.id]||{}; return {id:m.id,nom:m.nom,role:m.role,actif:m.actif!==false,paiement:x.paiement||'',coutHoraire:x.coutHoraire||0,palierH:x.palierH||0,palierTarif:x.palierTarif||0,pausePayee:!!x.pausePayee,fixeJour:x.fixeJour||0,office:!!x.office,heuresDecl:x.heuresDecl||0,mensuel:x.mensuel||0,tarifs:x.tarifs||[]}; });
   // 1. factures du mois (sans les doubles)
   var dbl={}; facturesDoublons().forEach(function(x){ dbl[x.__id]=1; });
   var facts=o.factures.filter(function(f){ return (f.statut==='validee'||f.statut==='a_verifier') && !dbl[f.__id] && String(f.mois||String(f.date||f.jour||'').slice(0,7))===o.mois; });
@@ -3128,16 +3133,16 @@ function argentDuMois(o){
   var parMJ={}, refs={};
   o.pointages.forEach(function(p){ if(p.type==='annule') refs[p.ref]=p; });
   o.pointages.forEach(function(p){ if(p.type==='annule') return; var k=p.membre+'|'+p.jour; (parMJ[k]=parMJ[k]||[]).push(p); if(refs[p.__id]) parMJ[k].push(refs[p.__id]); });
-  var minParM={}, coutParM={}; Object.keys(parMJ).forEach(function(k){ var id=k.split('|')[0], mb=membres.filter(function(z){return z.id===id})[0], x=intervalles(selonPause(parMJ[k],mb),k.split('|')[1]<jour()); minParM[id]=(minParM[id]||0)+x.min; coutParM[id]=(coutParM[id]||0)+coutMinutes(x.min,mb); });
+  var minParM={}, coutParM={}; Object.keys(parMJ).forEach(function(k){ var id=k.split('|')[0], mb=membres.filter(function(z){return z.id===id})[0], x=intervalles(selonPause(parMJ[k],mb),k.split('|')[1]<jour()); minParM[id]=(minParM[id]||0)+x.min; coutParM[id]=(coutParM[id]||0)+coutMinutes(x.min,mb,k.split('|')[1]); });
   var jvM=joursDeVente(o.evs).filter(function(j){ return j.slice(0,7)===o.mois; });
-  membres.forEach(function(m){ if(!m.office||!m.actif) return; var mn=(m.heuresDecl||0)*60; minParM[m.id]=jvM.length*mn; coutParM[m.id]=jvM.length*coutMinutes(mn,m); });
+  membres.forEach(function(m){ if(!m.office||!m.actif) return; var mn=(m.heuresDecl||0)*60; minParM[m.id]=jvM.length*mn; coutParM[m.id]=jvM.reduce(function(t,d){ return t+coutMinutes(mn,m,d); },0); });
   var paie=[], aPayer=0, nbJM=new Date(parseInt(o.mois.slice(0,4),10),parseInt(o.mois.slice(5,7),10),0).getDate(), jEcoules=o.mois<jour().slice(0,7)?nbJM:(o.mois>jour().slice(0,7)?0:parseInt(jour().slice(8,10),10));
   membres.forEach(function(m){ if(!m.actif||m.role==='proprietaire') return;
     if(m.mensuel){ var cm=Math.round(m.mensuel*jEcoules/nbJM), pm=paye[m.id]||0, dm=eur(m.mensuel)+' par mois · '+jEcoules+' jours sur '+nbJM;
       paie.push({id:m.id,nom:m.nom,role:m.role,min:1,office:false,cout:cm,paye:pm,det:dm}); aPayer+=Math.max(0,cm-pm);
       if(cm) ajoute('personnel',{src:'heures',montant:cm,txt:m.nom+' : '+dm+' · payé '+eur(pm)+(cm>pm?' · à payer '+eur(cm-pm):'')}); return; }
     var mn=minParM[m.id]||0, cout=Math.round(coutParM[m.id]||0), py=paye[m.id]||0;
-    var det=(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+(m.office?' déclarées sur '+jvM.length+' jours d’ouverture':'')+(m.fixeJour?' + '+eur(m.fixeJour)+' en espèces par jour':'');
+    var det=(Math.round(mn/6)/10).toString().replace('.',',')+' h'+(m.palierH&&m.palierTarif?' (palier '+String(m.palierH).replace('.',',')+' h à '+eur(m.palierTarif)+', puis '+eur(m.coutHoraire)+')':' × '+eur(m.coutHoraire))+((m.tarifs||[]).length?' puis '+m.tarifs.slice().sort(function(a,b){return String(a.depuis).localeCompare(String(b.depuis));}).map(function(r){ return eur(r.coutHoraire)+' dès le '+String(r.depuis).slice(8,10)+'/'+String(r.depuis).slice(5,7); }).join(', '):'')+(m.office?' déclarées sur '+jvM.length+' jours d’ouverture':'')+(m.fixeJour?' + '+eur(m.fixeJour)+' en espèces par jour':'');
     paie.push({id:m.id,nom:m.nom,role:m.role,min:mn,office:!!m.office,cout:cout,paye:py,det:det}); aPayer+=Math.max(0,cout-py);
     if(cout) ajoute('personnel',{src:'heures',montant:cout,txt:m.nom+' : '+det+' · payé '+eur(py)+(cout>py?' · à payer '+eur(cout-py):'')});
   });
