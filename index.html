@@ -493,8 +493,11 @@ function slug(s){return String(s).toLowerCase().normalize('NFD').replace(/[\u030
 // Les ventes des jours passés ne changent plus : elles sont téléchargées une seule fois, puis gardées
 // (en mémoire et dans le navigateur). Les 3 derniers jours sont relus au plus toutes les minutes ;
 // aujourd'hui vient directement du suivi en direct.
-var EVC={mem:{},frais:{},idb:null,pret:null,enCours:{},directJour:null}, EVC_FIGE=3, EVC_TTL=60000;
+var EVC={mem:{},frais:{},lu:{},idb:null,pret:null,enCours:{},directJour:null}, EVC_FIGE=3, EVC_TTL=60000;
 function evcFige(j){ return j<=jour(new Date(Date.now()-EVC_FIGE*864e5)); }
+// une journée n'est gardée pour toujours que si elle a été lue APRÈS sa fin (sinon elle peut être incomplète : lue le matin, appli restée ouverte…)
+function finJour(j){ return new Date(j+'T23:59:59').getTime()+3600e3; }
+function evcComplet(j){ return EVC.mem[j]!=null&&EVC.lu[j]!=null&&EVC.lu[j]>=finJour(j); }
 function evcOuvrir(){
   if(EVC.pret) return EVC.pret;
   EVC.pret=new Promise(function(ok){
@@ -505,7 +508,8 @@ function evcOuvrir(){
       rq.onupgradeneeded=function(){ rq.result.createObjectStore('jours'); };
       rq.onsuccess=function(){ EVC.idb=rq.result;
         try{ var c=EVC.idb.transaction('jours','readonly').objectStore('jours').openCursor();
-          c.onsuccess=function(){ var cur=c.result; if(cur){ if(!EVC.mem[cur.key]&&evcFige(cur.key)) EVC.mem[cur.key]=cur.value; cur.continue(); } else fin(); };
+          c.onsuccess=function(){ var cur=c.result; if(cur){ var v=cur.value; // ancien format (liste sans date de lecture) : ignoré, la journée sera relue
+            if(!EVC.mem[cur.key]&&evcFige(cur.key)&&v&&!Array.isArray(v)&&v.lu>=finJour(cur.key)){ EVC.mem[cur.key]=v.e||[]; EVC.lu[cur.key]=v.lu; } cur.continue(); } else fin(); };
           c.onerror=fin;
         }catch(e){ fin(); } };
       rq.onerror=fin; rq.onblocked=fin;
@@ -513,8 +517,8 @@ function evcOuvrir(){
   });
   return EVC.pret;
 }
-function evcGarder(js){ if(!EVC.idb||!js.length) return; try{ var st=EVC.idb.transaction('jours','readwrite').objectStore('jours'); js.forEach(function(j){ st.put(EVC.mem[j]||[],j); }); }catch(e){} }
-function evcVider(){ EVC.mem={}; EVC.frais={}; try{ if(EVC.idb) EVC.idb.transaction('jours','readwrite').objectStore('jours').clear(); }catch(e){} }
+function evcGarder(js){ if(!EVC.idb||!js.length) return; try{ var st=EVC.idb.transaction('jours','readwrite').objectStore('jours'); js.forEach(function(j){ if(evcComplet(j)) st.put({e:EVC.mem[j]||[],lu:EVC.lu[j]},j); }); }catch(e){} }
+function evcVider(){ EVC.mem={}; EVC.frais={}; EVC.lu={}; try{ if(EVC.idb) EVC.idb.transaction('jours','readwrite').objectStore('jours').clear(); }catch(e){} }
 function joursListe(du,au){ var l=[], d=new Date(du+'T12:00:00'); while(jour(d)<=au && l.length<400){ l.push(jour(d)); d.setDate(d.getDate()+1); } return l; }
 function lendemain(j){ var d=new Date(j+'T12:00:00'); d.setDate(d.getDate()+1); return jour(d); }
 // même résultat qu'une lecture des événements du jour « du » au jour « au » (inclus)
@@ -522,14 +526,14 @@ function evsSnap(du,au){
   var auj=jour(); if(!au||au>auj) au=auj;
   return evcOuvrir().then(function(){
     var js=du<=au?joursListe(du,au):[], now=Date.now(), direct=EVC.directJour===auj;
-    var manque=js.filter(function(j){ if(j===auj&&direct) return false; if(!EVC.mem[j]) return true; return !evcFige(j)&&!(EVC.frais[j]>now-EVC_TTL); });
+    var manque=js.filter(function(j){ if(j===auj&&direct) return false; if(!EVC.mem[j]) return true; if(evcFige(j)) return !evcComplet(j); return !(EVC.frais[j]>now-EVC_TTL); });
     var groupes=[]; manque.forEach(function(j){ var g=groupes[groupes.length-1]; if(g&&lendemain(g[1])===j) g[1]=j; else groupes.push([j,j]); });
     return Promise.all(groupes.map(function(g){ var k=g[0]+'|'+g[1];
       if(!EVC.enCours[k]) EVC.enCours[k]=db.collection('evenements').where('jour','>=',g[0]).where('jour','<=',g[1]).get().then(function(s){
         var jl=joursListe(g[0],g[1]), dir=EVC.directJour===jour(), neuf={};
         jl.forEach(function(j){ neuf[j]=[]; });
         s.docs.forEach(function(d){ var x=d.data(); if(neuf[x.jour]) neuf[x.jour].push({id:d.id,d:x}); });
-        var t=Date.now(); jl.forEach(function(j){ if(j===jour()&&dir) return; EVC.mem[j]=neuf[j]; EVC.frais[j]=t; });
+        var t=Date.now(); jl.forEach(function(j){ if(j===jour()&&dir) return; EVC.mem[j]=neuf[j]; EVC.frais[j]=t; EVC.lu[j]=t; });
         evcGarder(jl.filter(evcFige));
         delete EVC.enCours[k];
       },function(e){ delete EVC.enCours[k]; throw e; });
