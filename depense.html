@@ -43,6 +43,26 @@ input.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12
 .ligne button{background:none;border:0;color:var(--danger);font-weight:700;font-size:14px;min-height:40px}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:999px;font-weight:700;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+.onglets{max-width:480px;margin:12px auto 0;padding:0 16px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.onglets button{border:1.5px solid var(--line);background:var(--surface);border-radius:14px;min-height:50px;font-size:17px;font-weight:800;color:var(--soft);font-family:inherit}
+.onglets button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.cm-art{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--surface2)}
+.cm-art .nom{flex:1;min-width:0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.cm-art .nom small{display:block;font-size:12px;font-weight:400;color:var(--soft)}
+.cm-art.pris .nom{color:var(--ok)}
+.cm-art.non .nom{color:#A49A8D;text-decoration:line-through}
+.cm-q{display:flex;align-items:center;gap:4px}
+.cm-q button{width:40px;height:40px;border-radius:12px;border:0;background:var(--bg);font-size:22px;font-weight:800;color:var(--ink)}
+.cm-q span{min-width:26px;text-align:center;font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+.cm-pb{border:1.5px solid var(--line);background:none;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:700;color:var(--soft);font-family:inherit}
+.cm-art.non .cm-pb{background:var(--surface2)}
+.cm-x{border:0;background:var(--danger-bg);color:var(--danger);border-radius:10px;min-width:40px;height:40px;font-weight:800;font-size:16px}
+.cm-ajout{display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px dashed var(--line);border-radius:12px;min-height:44px;margin-top:8px;font-weight:700;color:var(--soft);background:none;width:100%;font-size:15px;font-family:inherit}
+.cm-reste{background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 12px;font-weight:700;font-size:14px}
+.cm-reste.fini{background:var(--ok-bg);color:var(--ok)}
+.cm-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+.cm-modal .card{width:100%;max-width:480px;border-radius:18px 18px 0 0;display:grid;gap:10px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0))}
+select.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12px;font-size:16px;font-family:inherit;background:#fff}
 .hidden{display:none!important}
 .err{color:var(--danger);font-weight:700}
 </style>
@@ -60,6 +80,25 @@ input.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:12
     <p class="err" id="lgErr"></p>
   </div>
 </main>
+<nav class="hidden" id="onglets"><button id="ongC" data-onglet="commande">🛒 Commande</button><button id="ongD" data-onglet="depenses">Dépenses</button></nav>
+<main id="cmd" class="hidden">
+  <div class="cm-reste" id="cmReste">Chargement de la liste…</div>
+  <div id="cmCats" style="display:grid;gap:12px"></div>
+  <button class="cm-ajout" id="cmNvCat" style="background:var(--surface)">＋ Nouvelle catégorie</button>
+  <button class="btn sec" id="cmEdit">✎ Modifier la liste (supprimer des articles)</button>
+  <div class="card"><div class="lbl" style="display:flex;justify-content:space-between"><span>Ma commande</span><span id="cmNb"></span></div><div id="cmRecap"></div></div>
+  <button class="btn" id="cmEnvoyer">📋 Copier / envoyer la liste</button>
+  <button class="btn sec" id="cmZero">Nouvelle commande (remettre les quantités à zéro)</button>
+</main>
+<div class="cm-modal hidden" id="cmModal"><div class="card">
+  <b style="font-size:18px" id="cmMTitre">Ajouter un article</b>
+  <input class="in" id="cmMNom" maxlength="60" placeholder="Nom (ex. Olives)">
+  <input class="in" id="cmMUn" maxlength="30" placeholder="Unité (ex. pot, seau, carton)">
+  <select class="in" id="cmMCat"></select>
+  <p class="err" id="cmMErr" style="margin:0"></p>
+  <button class="btn" id="cmMOk">Ajouter à la liste</button>
+  <button class="btn sec" id="cmMAnn">Annuler</button>
+</div></div>
 <main id="app" class="hidden">
   <div class="card">
     <div class="note" style="text-align:center" id="date"></div>
@@ -128,6 +167,105 @@ function demarrer(){
   db.collection('config').doc('depenses').get().then(function(s){ var c=s.exists&&s.data().categories; if(Array.isArray(c)&&c.length) S.cats=c; rendre(); }).catch(function(){ rendre(); });
   rendre(); suivreJour();
 }
+/* ===== Onglet Commande : liste partagée (config/commande), quantités seulement ===== */
+var CM={doc:null,cats:null,q:{},nb:{},edit:false,lance:false};
+function cmId(){ return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function cmDefaut(){
+  var L=[
+   ['Viandes',[['Hamburger','boîtes de 30'],['Mulky','boîtes'],['Mexicanos','boîtes'],['Poulet pané','boîtes']]],
+   ['Fromages et extras',[['Cheddar','paquets'],['Gouda','paquets'],['Feta','kg'],['Œufs','plateaux'],['Oignons frits','sacs'],['Oignon caramélisé','kg'],['Jalapeños','pots'],['Olives','pots']]],
+   ['Frites et crudités',[['Frites','sacs de 2,5 kg'],['Salade','pièces'],['Tomates','kg'],['Oignons','sacs'],['Carottes','kg']]],
+   ['Sauces',[['Andalouse','seaux'],['Samouraï','seaux'],['Algérienne','seaux'],['Brasil','seaux'],['Pitta','seaux'],['Mayonnaise','seaux'],['Ketchup','bidons'],['Big','pots'],['Cocktail','seaux'],['Américaine','seaux'],['Harissa','pots']]],
+   ['Boissons',[['Canettes (pack de 24)','packs'],['Redbull','packs'],['Eau','packs']]],
+   ['Emballages',[['Papier sandwich','rouleaux'],['Sacs à emporter','paquets'],['Serviettes','paquets'],['Papier alu','rouleaux']]],
+   ['Entretien et cuisine',[['Huile friteuse','bidons'],['Gants','boîtes'],['Produit vaisselle','bouteilles'],['Sacs poubelle','rouleaux'],['Essuie-tout','paquets']]]
+  ], n=0;
+  return L.map(function(g,i){ return {id:'c'+i,nom:g[0],arts:g[1].map(function(a){ n++; return {id:'d'+n,nom:a[0],u:a[1]}; })}; });
+}
+function cmRendre(){
+  if(!CM.cats) return;
+  var tot=0,vus=0,r=[],h='';
+  CM.cats.forEach(function(c){
+    h+='<div class="card"><div class="lbl" style="display:flex;justify-content:space-between;align-items:center"><span>'+esc(c.nom)+'</span>'+(CM.edit?'<button class="cm-x" data-cmxcat="'+c.id+'" aria-label="Supprimer la catégorie">✕</button>':'')+'</div>';
+    if(!c.arts.length) h+='<p class="note" style="margin:4px 0">Aucun article.</p>';
+    c.arts.forEach(function(a){
+      var q=CM.q[a.id]||0, non=!q&&!!CM.nb[a.id]; tot++; if(q||non) vus++; if(q) r.push([a.nom,q,a.u]);
+      h+='<div class="cm-art'+(q?' pris':non?' non':'')+'"><div class="nom">'+esc(a.nom)+'<small>'+esc(a.u)+'</small></div>'
+        +(CM.edit?'<button class="cm-x" data-cmx="'+a.id+'" aria-label="Supprimer">✕</button>'
+        :'<button class="cm-pb" data-cmpb="'+a.id+'">'+(non?'↺':'Pas besoin')+'</button><div class="cm-q"><button data-cmm="'+a.id+'" aria-label="Moins">−</button><span>'+(q||'')+'</span><button data-cmp="'+a.id+'" aria-label="Plus">+</button></div>')
+        +'</div>';
+    });
+    if(!CM.edit) h+='<button class="cm-ajout" data-cmaj="'+c.id+'">＋ Ajouter un article</button>';
+    h+='</div>';
+  });
+  $('cmCats').innerHTML=h;
+  var reste=tot-vus, e=$('cmReste');
+  e.className='cm-reste'+(reste?'':' fini');
+  e.textContent=CM.edit?'Mode modification : touche ✕ pour supprimer un article.':(reste?'⚠ '+reste+' article'+(reste>1?'s':'')+' pas encore regardé'+(reste>1?'s':'')+' : mets une quantité ou « Pas besoin »':'✓ Toute la liste a été passée en revue');
+  $('cmEdit').textContent=CM.edit?'✓ Terminer la modification':'✎ Modifier la liste (supprimer des articles)';
+  $('cmNb').textContent=r.length+' article'+(r.length>1?'s':'');
+  $('cmRecap').innerHTML=r.length?r.map(function(x){ return '<div class="ligne"><span>'+esc(x[0])+'</span><b>'+x[1]+' '+esc(x[2])+'</b></div>'; }).join(''):'<p class="note" style="margin:0">Rien pour l’instant.</p>';
+  CM.texte=r.length?'Commande LE DOUBLE · '+new Date().toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long'})+'\n'+r.map(function(x){ return '- '+x[0]+' : '+x[1]+' '+x[2]; }).join('\n'):'';
+}
+function cmErreur(er){ alert('Enregistrement impossible ('+(er&&(er.code||er.message))+'). Vérifie ta connexion.'); }
+function cmMaj(champs){ return CM.doc.update(Object.assign({maj:Date.now()},champs)).catch(cmErreur); }
+function cmQte(id,q){
+  q=Math.max(0,Math.min(999,q)); CM.q[id]=q; if(q) delete CM.nb[id]; cmRendre();
+  var c={}; c['q.'+id]=q||firebase.firestore.FieldValue.delete(); if(q) c['nb.'+id]=firebase.firestore.FieldValue.delete(); cmMaj(c);
+}
+function cmLancer(){
+  if(CM.lance) return; CM.lance=true; CM.doc=db.collection('config').doc('commande');
+  CM.doc.onSnapshot(function(s){
+    var d=s.exists?s.data():null;
+    if(!d||!Array.isArray(d.cats)){ if(!s.metadata.fromCache) CM.doc.set({cats:cmDefaut(),q:{},nb:{},maj:Date.now()}).catch(cmErreur); return; }
+    CM.cats=d.cats; CM.q=d.q||{}; CM.nb=d.nb||{}; cmRendre();
+  },function(e){ $('cmReste').textContent='Lecture impossible ('+e.code+')'; });
+}
+function onglet(n){
+  try{ localStorage.setItem('ld-dep-onglet',n); }catch(e){}
+  var c=n==='commande';
+  $('ongC').className=c?'on':''; $('ongD').className=c?'':'on';
+  $('cmd').className=c?'':'hidden'; $('app').className=c?'hidden':'';
+  if(c) cmLancer();
+}
+function cmOuvrir(catId){
+  $('cmMCat').innerHTML=CM.cats.map(function(c){ return '<option value="'+c.id+'"'+(c.id===catId?' selected':'')+'>'+esc(c.nom)+'</option>'; }).join('');
+  $('cmMNom').value=''; $('cmMUn').value=''; $('cmMErr').textContent=''; $('cmModal').className='cm-modal'; setTimeout(function(){ $('cmMNom').focus(); },50);
+}
+$('cmMAnn').onclick=function(){ $('cmModal').className='cm-modal hidden'; };
+$('cmMOk').onclick=function(){
+  var nom=$('cmMNom').value.trim(), u=$('cmMUn').value.trim()||'pièces', cid=$('cmMCat').value;
+  if(!nom){ $('cmMErr').textContent='Écris le nom de l’article.'; return; }
+  var cats=JSON.parse(JSON.stringify(CM.cats)), c=cats.filter(function(x){ return x.id===cid; })[0]; if(!c) return;
+  if(c.arts.some(function(a){ return a.nom.toLowerCase()===nom.toLowerCase(); })){ $('cmMErr').textContent='Cet article est déjà dans la liste.'; return; }
+  c.arts.push({id:cmId(),nom:nom,u:u}); CM.cats=cats; cmRendre(); $('cmModal').className='cm-modal hidden';
+  cmMaj({cats:cats}).then(function(){ toast(nom+' ajouté'); });
+};
+$('cmNvCat').onclick=function(){ var n=(prompt('Nom de la nouvelle catégorie')||'').trim(); if(!n) return;
+  var cats=JSON.parse(JSON.stringify(CM.cats)); cats.push({id:cmId(),nom:n,arts:[]}); CM.cats=cats; cmRendre(); cmMaj({cats:cats}); };
+$('cmEdit').onclick=function(){ CM.edit=!CM.edit; cmRendre(); };
+$('cmZero').onclick=function(){ if(!confirm('Remettre toutes les quantités à zéro ? Les articles restent dans la liste.')) return;
+  CM.q={}; CM.nb={}; cmRendre(); cmMaj({q:{},nb:{}}).then(function(){ toast('Nouvelle commande prête'); }); };
+$('cmEnvoyer').onclick=function(){
+  if(!CM.texte){ toast('La commande est vide'); return; }
+  var t=CM.texte;
+  if(navigator.share){ navigator.share({text:t}).catch(function(){}); return; }
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){ toast('Liste copiée : colle-la dans WhatsApp'); }).catch(function(){ prompt('Copie ce texte :',t); });
+};
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-onglet],[data-cmp],[data-cmm],[data-cmpb],[data-cmaj],[data-cmx],[data-cmxcat]'); if(!b||!CM) return; var d=b.dataset;
+  if(d.onglet){ onglet(d.onglet); return; }
+  if(!CM.cats) return;
+  if(d.cmp) cmQte(d.cmp,(CM.q[d.cmp]||0)+1);
+  if(d.cmm) cmQte(d.cmm,(CM.q[d.cmm]||0)-1);
+  if(d.cmpb){ var id=d.cmpb, c={}; if(CM.nb[id]&&!CM.q[id]){ delete CM.nb[id]; c['nb.'+id]=firebase.firestore.FieldValue.delete(); } else { CM.nb[id]=true; delete CM.q[id]; c['nb.'+id]=true; c['q.'+id]=firebase.firestore.FieldValue.delete(); } cmRendre(); cmMaj(c); }
+  if(d.cmaj) cmOuvrir(d.cmaj);
+  if(d.cmx){ var cats=JSON.parse(JSON.stringify(CM.cats)), nom=''; cats.forEach(function(c){ c.arts=c.arts.filter(function(a){ if(a.id===d.cmx){ nom=a.nom; return false; } return true; }); });
+    if(!confirm('Supprimer « '+nom+' » de la liste ?')) return; CM.cats=cats; cmRendre(); cmMaj({cats:cats}); }
+  if(d.cmxcat){ var cc=CM.cats.filter(function(c){ return c.id===d.cmxcat; })[0]; if(!cc) return;
+    if(!confirm('Supprimer la catégorie « '+cc.nom+' »'+(cc.arts.length?' et ses '+cc.arts.length+' articles':'')+' ?')) return;
+    CM.cats=CM.cats.filter(function(c){ return c.id!==d.cmxcat; }); cmRendre(); cmMaj({cats:CM.cats}); }
+});
 $('lgBtn').onclick=function(){ $('lgErr').textContent=''; auth.signInWithEmailAndPassword($('lgEmail').value.trim(),$('lgPass').value).catch(function(){ $('lgErr').textContent='E-mail ou mot de passe incorrect.'; }); };
 $('quitter').onclick=function(){ auth.signOut(); };
 auth.onAuthStateChanged(function(u){
@@ -135,6 +273,7 @@ auth.onAuthStateChanged(function(u){
   if(u&&!ok){ auth.signOut(); $('lgErr').textContent='Cette page est réservée au propriétaire.'; }
   $('chargement').className='hidden';
   $('login').className=ok?'hidden':''; $('app').className=ok?'':'hidden'; $('quitter').className=ok?'':'hidden';
+  $('onglets').className=ok?'onglets':'hidden'; if(!ok){ $('cmd').className='hidden'; } else { var og='depenses'; try{ og=localStorage.getItem('ld-dep-onglet')||'depenses'; }catch(e){} onglet(og); }
   if(ok&&!S.lance){ S.lance=true; demarrer(); }
 });
 </script>
