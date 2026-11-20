@@ -108,7 +108,7 @@ select.in{width:100%;border:1.5px solid var(--line);border-radius:12px;padding:1
     </div>
   </div>
   <div class="card"><div class="lbl">Quoi ?</div><div class="chips" id="cats"></div></div>
-  <div class="card"><div class="lbl">Payé avec</div><div class="chips" id="paie"></div></div>
+  <div class="card"><div class="lbl">Payé avec</div><div class="chips" id="paie"></div><label id="tirLbl" class="hidden" style="display:flex;align-items:center;gap:10px;margin-top:12px;font-size:15px;font-weight:600"><input type="checkbox" id="tirIn" style="width:22px;height:22px;flex:none">Pris dans le tiroir de la caisse</label></div>
   <label class="photo" id="photoLbl">📷 Photo du ticket (facultatif)<input type="file" id="photo" accept="image/*" capture="environment" class="hidden"></label>
   <input class="in" id="noteIn" maxlength="120" placeholder="Note (facultatif)">
   <button class="btn" id="ok" disabled>Enregistrer</button>
@@ -133,7 +133,7 @@ var S={cents:0,cat:null,paie:null,photo:null,cats:CATS_DEFAUT};
 try{ S.paie=localStorage.getItem('ld-dep-paie')||'Carte pro'; }catch(e){ S.paie='Carte pro'; }
 function majMontant(){ $('montant').textContent=eur(S.cents); $('ok').disabled=!(S.cents>0&&S.cat); $('ok').textContent=S.cents>0?'Enregistrer · '+eur(S.cents):'Enregistrer'; }
 function chips(id,liste,val,attr){ $(id).innerHTML=liste.map(function(x){ return '<button class="chip'+(x===val?' on':'')+'" data-'+attr+'="'+esc(x)+'">'+esc(x)+'</button>'; }).join(''); }
-function rendre(){ chips('cats',S.cats,S.cat,'cat'); chips('paie',PAIE,S.paie,'paie'); majMontant(); }
+function rendre(){ chips('cats',S.cats,S.cat,'cat'); chips('paie',PAIE,S.paie,'paie'); $('tirLbl').className=S.paie==='Espèces'?'':'hidden'; if(S.paie!=='Espèces') $('tirIn').checked=false; majMontant(); }
 $('kp').onclick=function(e){ var b=e.target.closest('button'); if(!b) return; var t=b.textContent;
   if(t==='⌫') S.cents=Math.floor(S.cents/10); else if(t==='00') S.cents=Math.min(S.cents*100,9999999); else S.cents=Math.min(S.cents*10+parseInt(t,10),9999999);
   majMontant(); };
@@ -151,15 +151,16 @@ $('ok').onclick=function(){
   if(!(S.cents>0&&S.cat)) return; var b=this; b.disabled=true;
   var ref=db.collection('depenses').doc(), now=new Date();
   var d={montant:S.cents,categorie:S.cat,paiement:S.paie,aRembourser:S.paie.indexOf('Perso')===0,note:$('noteIn').value.trim(),jour:jour(now),mois:jour(now).slice(0,7),h:hhmm(now),tsClient:now.getTime(),photo:!!S.photo};
+  if(S.paie==='Espèces'&&$('tirIn').checked) d.tiroir=true;
   (S.photo?db.collection('depenses_img').doc(ref.id).set({media:'image/jpeg',data:S.photo}):Promise.resolve()).then(function(){ return ref.set(d); }).then(function(){
-    toast('Dépense notée : '+eur(S.cents)); S.cents=0; S.cat=null; S.photo=null; $('noteIn').value=''; $('photoLbl').className='photo'; $('photoLbl').firstChild.textContent='📷 Photo du ticket (facultatif) '; rendre();
+    toast('Dépense notée : '+eur(S.cents)); S.cents=0; S.cat=null; S.photo=null; $('noteIn').value=''; $('tirIn').checked=false; $('photoLbl').className='photo'; $('photoLbl').firstChild.textContent='📷 Photo du ticket (facultatif) '; rendre();
   }).catch(function(er){ b.disabled=false; alert('Enregistrement impossible ('+(er.code||er.message)+'). Vérifie ta connexion.'); });
 };
 function suivreJour(){
   db.collection('depenses').where('jour','==',jour()).onSnapshot(function(s){
     var l=s.docs.map(function(d){ var o=d.data(); o.__id=d.id; return o; }).sort(function(a,b){ return b.tsClient-a.tsClient; }), t=0;
     l.forEach(function(x){ t+=x.montant; });
-    $('jour').innerHTML=l.length?l.map(function(x){ return '<div class="ligne"><span>'+esc(x.h)+' · '+esc(x.categorie)+(x.photo?' 📷':'')+'<br><span class="note">'+esc(x.paiement)+(x.note?' · '+esc(x.note):'')+'</span></span><span style="text-align:right"><b>'+eur(x.montant)+'</b><br><button data-supp="'+x.__id+'">Supprimer</button></span></div>'; }).join('')+'<div class="ligne"><b>Total du jour</b><b>'+eur(t)+'</b></div>':'<p class="note" style="margin:0">Aucune dépense notée aujourd’hui.</p>';
+    $('jour').innerHTML=l.length?l.map(function(x){ return '<div class="ligne"><span>'+esc(x.h)+' · '+esc(x.categorie)+(x.photo?' 📷':'')+'<br><span class="note">'+esc(x.paiement)+(x.tiroir?' · pris dans le tiroir':'')+(x.note?' · '+esc(x.note):'')+'</span></span><span style="text-align:right"><b>'+eur(x.montant)+'</b><br><button data-supp="'+x.__id+'">Supprimer</button></span></div>'; }).join('')+'<div class="ligne"><b>Total du jour</b><b>'+eur(t)+'</b></div>':'<p class="note" style="margin:0">Aucune dépense notée aujourd’hui.</p>';
   },function(e){ $('jour').innerHTML='<p class="err">Lecture impossible ('+e.code+')</p>'; });
 }
 function demarrer(){

@@ -677,6 +677,7 @@ function demarrer(){
   suivreClotures();
   chargerApports();
   suivreFond();
+  suivreTiroirDep();
   suivreNotes();
   setTimeout(function(){ try{ majATraiter(); }catch(e){} },2500);
   setTimeout(function(){ try{ suivreSortiesJour(); majSortiesDirect(); }catch(e){} },2000);
@@ -1098,8 +1099,9 @@ function bilanJour(clos,cash,sorties,apport,fondDefaut){
   var ouv=null, clo=null;
   clos.forEach(function(c){ if(c.type==='ouverture' && (!ouv||c.tsClient>ouv.tsClient)) ouv=c; if(c.type==='cloture' && (!clo||c.tsClient>clo.tsClient)) clo=c; });
   var fond=ouv?(ouv.ok?(ouv.fondPrevu!=null?ouv.fondPrevu:REGC.fondCaisse):ouv.montant):(clo&&clo.fondPrevu!=null?clo.fondPrevu:(fondDefaut!=null?fondDefaut:REGC.fondCaisse));
-  var attendu=fond+(cash||0)-(sorties||0)+(apport||0);
-  return {ouv:ouv,clo:clo,fond:fond,apport:apport||0,attendu:attendu,ecart:clo?clo.montant-attendu:null};
+  var j=(ouv&&ouv.jour)||(clo&&clo.jour)||(clos[0]&&clos[0].jour)||'', dt=j?tiroirDepDuJour(j):{montant:0,txt:[]};
+  var attendu=fond+(cash||0)-(sorties||0)+(apport||0)-dt.montant;
+  return {ouv:ouv,clo:clo,fond:fond,apport:apport||0,depTiroir:dt.montant,depTiroirTxt:dt.txt.filter(Boolean).join(' · '),attendu:attendu,ecart:clo?clo.montant-attendu:null};
 }
 /* ---------- ARGENT REMIS D'UNE ENVELOPPE DANS LA CAISSE ---------- */
 // enveloppes/{jour} : retire (total en cents) et retraits [{montant,le,h,note,pourJour}]
@@ -1110,6 +1112,10 @@ function suivreFond(){ db.collection('etat').doc('fond').onSnapshot(function(s){
 function fondPrevuAujourdhui(){ return ETAT_FOND&&ETAT_FOND.montant!=null&&ETAT_FOND.jour<jour()?ETAT_FOND:null; }
 function lireApports(docs){ APPORTS={}; docs.forEach(function(d){ (d.data().retraits||[]).forEach(function(t){ if(t.pourJour) APPORTS[t.pourJour]=(APPORTS[t.pourJour]||0)+(t.montant||0); }); }); }
 function apportsDuJour(j){ return APPORTS[j]||0; }
+// dépenses notées sur le téléphone avec « Pris dans le tiroir de la caisse » : comptent comme une sortie du tiroir ce jour-là (écart de caisse juste)
+var TIROIR_DEP={};
+function suivreTiroirDep(){ db.collection('depenses').where('tiroir','==',true).onSnapshot(function(s){ TIROIR_DEP={}; s.docs.forEach(function(d){ var x=d.data(); if(!x.jour||!x.montant) return; var t=TIROIR_DEP[x.jour]=TIROIR_DEP[x.jour]||{montant:0,txt:[]}; t.montant+=x.montant; t.txt.push(String(x.note||x.categorie||'').trim()); }); majCloture(); },function(){}); }
+function tiroirDepDuJour(j){ return TIROIR_DEP[j]||{montant:0,txt:[]}; }
 function chargerApports(){ return db.collection('enveloppes').get().then(function(s){ lireApports(s.docs); majCloture(); }).catch(function(){}); }
 function remplirApport(){
   var sel=$('apEnv'); if(!sel) return;
@@ -1282,6 +1288,7 @@ function majCloture(){
   h+=ligneB('+ Ventes en espèces',eur(r.cash));
   if(r.sorties) h+=ligneB('− Sorties d’argent','−'+eur(r.sorties));
   if(b.apport) h+=ligneB('+ Remis d’une enveloppe',eur(b.apport));
+  if(b.depTiroir) h+=ligneB('− Pris dans le tiroir, noté en dépense'+(b.depTiroirTxt?' <span class="note">('+esc(b.depTiroirTxt)+')</span>':''),'−'+eur(b.depTiroir));
   h+=ligneB('= Attendu dans le tiroir',eur(b.attendu),'font-weight:700');
   if(b.clo){
     var gros=Math.abs(b.ecart)>REGC.seuilEcart;
@@ -1341,7 +1348,7 @@ function rendreCaissePeriode(parJour,r,du,au){
         if(!b.clo) return '<div class="row"><span class="l">'+j+'</span><span class="note">pas de clôture</span></div>';
         tot+=b.ecart; n++;
         var gros=Math.abs(b.ecart)>REGC.seuilEcart;
-        return '<div class="row"><span class="l">'+new Date(j+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})+' · compté '+eur(b.clo.montant)+' / attendu '+eur(b.attendu)+'</span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
+        return '<div class="row"><span class="l">'+new Date(j+'T12:00:00').toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})+' · compté '+eur(b.clo.montant)+' / attendu '+eur(b.attendu)+(b.depTiroir?'<br><span class="note">dont '+eur(b.depTiroir)+' pris dans le tiroir, noté en dépense'+(b.depTiroirTxt?' ('+esc(b.depTiroirTxt)+')':'')+'</span>':'')+'</span><b class="num" style="color:'+(gros?'var(--danger)':'var(--ok)')+'">'+(b.ecart>0?'+':'')+eur(b.ecart)+'</b></div>';
       }).join('')+(n?'<div class="row"><span class="l"><b>Écart cumulé sur la période</b></span><b class="num">'+(tot>0?'+':'')+eur(tot)+'</b></div>':''):'<div class="empty">Aucune clôture sur la période.</div>';
     var ks=Object.keys(r.sortiesMotifs).sort(function(a,b){return r.sortiesMotifs[b]-r.sortiesMotifs[a]});
     if($('hSor')) $('hSor').innerHTML=ks.length?ks.map(function(k){return '<div class="row"><span class="l">'+esc(k)+'</span><b class="num">'+eur(r.sortiesMotifs[k])+'</b></div>'}).join('')+'<div class="row"><span class="l"><b>Total</b></span><b class="num">'+eur(r.sorties)+'</b></div>':'<div class="empty">Aucune sortie d’argent sur la période.</div>';
